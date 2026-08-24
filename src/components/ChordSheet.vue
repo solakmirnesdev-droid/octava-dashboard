@@ -5,11 +5,13 @@ import { parseSong, transposeContent } from '../utils/chordpro';
 const props = defineProps({
   content: { type: String, default: '' },
   semitones: { type: Number, default: 0 },
-  targetKey: { type: String, default: '' }
+  // Passed so transposition spells the result to match the destination key
+  // instead of falling back to sharps for everything.
+  originalKey: { type: String, default: '' }
 });
 
 const lines = computed(() =>
-  parseSong(transposeContent(props.content, props.semitones, props.targetKey))
+  parseSong(transposeContent(props.content, props.semitones, props.originalKey))
 );
 </script>
 

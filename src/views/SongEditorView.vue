@@ -14,22 +14,42 @@ const KEYS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B',
 
 const form = ref({
   title: '', artist: '', originalKey: 'Am', capo: 0,
-  difficulty: 'medium', tags: [], content: '', status: 'draft'
+  difficulty: 'medium', tags: [], genres: [], content: '', status: 'draft'
 });
+const genres = ref([]);
 const saving = ref(false);
 const error = ref(null);
 
 const usedChords = computed(() => extractChords(form.value.content));
 
 onMounted(async () => {
+  try {
+    const { data } = await client.get('/genres');
+    genres.value = data.genres || [];
+  } catch {
+    // The picker degrades to empty; the song can still be saved without one.
+  }
+
   if (!props.id) return;
   try {
     const { data } = await client.get(`/songs/${props.id}`);
-    form.value = { ...form.value, ...data.song, artist: data.song.artist?.name || '' };
+    form.value = {
+      ...form.value,
+      ...data.song,
+      artist: data.song.artist?.name || '',
+      // The API returns populated genre objects; the form works in slugs.
+      genres: (data.song.genres || []).map((g) => g.slug || g)
+    };
   } catch (err) {
     error.value = err.response?.data?.message || 'Pjesma nije pronađena.';
   }
 });
+
+function toggleGenre(slug) {
+  const next = new Set(form.value.genres);
+  next.has(slug) ? next.delete(slug) : next.add(slug);
+  form.value.genres = [...next];
+}
 
 /**
  * Wrap the current selection in brackets, or drop an empty pair at the caret.
@@ -114,6 +134,26 @@ async function save(status) {
     </label>
   </div>
 
+  <div class="mb-6">
+    <span class="text-sm font-medium">Rubrike</span>
+    <div class="mt-1.5 flex flex-wrap gap-1.5">
+      <button
+        v-for="genre in genres" :key="genre._id"
+        type="button"
+        class="rounded-full border px-3 py-1 text-xs transition"
+        :class="form.genres.includes(genre.slug)
+          ? 'border-accent bg-accent/10 text-accent'
+          : 'border-black/15 text-black/60 hover:border-accent'"
+        @click="toggleGenre(genre.slug)"
+      >
+        {{ genre.name }}
+      </button>
+    </div>
+    <p class="mt-1.5 text-xs text-black/40">
+      Pjesma može biti u više rubrika — npr. Domaća i Zabavna istovremeno.
+    </p>
+  </div>
+
   <div class="grid gap-6 lg:grid-cols-2">
     <div>
       <div class="mb-2 flex items-center justify-between">
@@ -148,7 +188,7 @@ async function save(status) {
         </span>
       </div>
       <div class="h-[28rem] overflow-auto rounded border border-black/10 bg-white p-4">
-        <ChordSheet :content="form.content" />
+        <ChordSheet :content="form.content" :original-key="form.originalKey" />
       </div>
     </div>
   </div>
