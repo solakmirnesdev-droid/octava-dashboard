@@ -3,6 +3,8 @@ import { ref, computed, onMounted, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import client from '../api/client';
 import ChordSheet from '../components/ChordSheet.vue';
+import ImportPanel from '../components/ImportPanel.vue';
+import ChordLineEditor from '../components/ChordLineEditor.vue';
 import { extractChords } from '../utils/chordpro';
 
 const props = defineProps({ id: { type: String, default: null } });
@@ -17,6 +19,9 @@ const form = ref({
   difficulty: 'medium', tags: [], genres: [], content: '', status: 'draft'
 });
 const genres = ref([]);
+// Visual placement is the default; the raw view stays for bulk paste and for
+// fixing anything the click editor cannot express.
+const mode = ref('visual');
 const saving = ref(false);
 const error = ref(null);
 
@@ -44,6 +49,11 @@ onMounted(async () => {
     error.value = err.response?.data?.message || 'Pjesma nije pronađena.';
   }
 });
+
+function applyImport({ content, originalKey }) {
+  form.value.content = content;
+  if (originalKey) form.value.originalKey = originalKey;
+}
 
 function toggleGenre(slug) {
   const next = new Set(form.value.genres);
@@ -112,6 +122,8 @@ async function save(status) {
 
   <p v-if="error" class="mb-4 rounded bg-accent/10 px-4 py-2 text-sm text-accent">{{ error }}</p>
 
+  <ImportPanel @imported="applyImport" />
+
   <div class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
     <label class="block">
       <span class="text-sm font-medium">Naslov</span>
@@ -158,11 +170,30 @@ async function save(status) {
     <div>
       <div class="mb-2 flex items-center justify-between">
         <span class="text-sm font-medium">Tekst i akordi</span>
-        <button class="text-xs text-black/50 hover:text-accent" @click="insertChordMarker">
-          Ubaci akord (⌘K)
-        </button>
+
+        <div class="flex items-center gap-1 rounded border border-black/15 p-0.5 text-xs">
+          <button
+            type="button" class="rounded px-2 py-1"
+            :class="mode === 'visual' ? 'bg-ink text-white' : 'text-black/50 hover:text-accent'"
+            @click="mode = 'visual'"
+          >Vizuelno</button>
+          <button
+            type="button" class="rounded px-2 py-1"
+            :class="mode === 'raw' ? 'bg-ink text-white' : 'text-black/50 hover:text-accent'"
+            @click="mode = 'raw'"
+          >Tekst</button>
+        </div>
       </div>
+
+      <div
+        v-if="mode === 'visual'"
+        class="h-[28rem] overflow-auto rounded border border-black/15 bg-white p-4"
+      >
+        <ChordLineEditor v-model:content="form.content" />
+      </div>
+
       <textarea
+        v-else
         ref="editor"
         v-model="form.content"
         spellcheck="false"
@@ -171,9 +202,16 @@ async function save(status) {
         @keydown.meta.k.prevent="insertChordMarker"
         @keydown.ctrl.k.prevent="insertChordMarker"
       />
+
       <p class="mt-2 text-xs text-black/40">
-        Akordi idu u uglastim zagradama, tačno na slogu gdje se mijenjaju.
-        Oznake dijelova ([Refren], [Solo]) pišu se u svom redu.
+        <template v-if="mode === 'visual'">
+          Klikni iznad stiha na mjesto gdje se akord mijenja. Klik na postojeći
+          akord ga mijenja, prazno polje ga briše.
+        </template>
+        <template v-else>
+          Akordi idu u uglastim zagradama, tačno na slogu gdje se mijenjaju.
+          Oznake dijelova ([Refren], [Solo]) pišu se u svom redu.
+        </template>
       </p>
     </div>
 

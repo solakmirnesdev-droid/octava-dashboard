@@ -7,3 +7,18 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 }
+
+/*
+ * Tailwind 4 dropped the pointer cursor on buttons to match browser defaults.
+ * Everything clickable here should still read as clickable, so it is restored
+ * once rather than as a utility class on every control.
+ */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}

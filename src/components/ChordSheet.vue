@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { parseSong, transposeContent } from '../utils/chordpro';
+import { parseSong, transposeContent, normalizeNotation } from '../utils/chordpro';
 
 const props = defineProps({
   content: { type: String, default: '' },
@@ -11,7 +11,7 @@ const props = defineProps({
 });
 
 const lines = computed(() =>
-  parseSong(transposeContent(props.content, props.semitones, props.originalKey))
+  parseSong(normalizeNotation(transposeContent(props.content, props.semitones, props.originalKey)))
 );
 </script>
 
@@ -24,6 +24,12 @@ const lines = computed(() =>
       >
         {{ line.label }}
       </h3>
+
+      <!-- Instrumental run: spaced evenly, since there are no words to sit over
+           and column positions would collide the chords. -->
+      <div v-else-if="line.instrumental" class="flex flex-wrap gap-4 min-h-[1.6em] font-semibold text-accent">
+        <span v-for="(seg, j) in line.segments.filter((s) => s.chord)" :key="j">{{ seg.chord }}</span>
+      </div>
 
       <!-- Chord and lyric ride in the same inline-block so they stay aligned
            regardless of font metrics or how the line wraps. -->

@@ -6,7 +6,7 @@ const client = axios.create({
 });
 
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('octava_token');
+  const token = localStorage.getItem('octava_staff_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -17,7 +17,7 @@ client.interceptors.response.use(
     // An expired or revoked token should drop the worker back to the login
     // screen rather than leaving the UI in a half-authenticated state.
     if (error.response?.status === 401) {
-      localStorage.removeItem('octava_token');
+      localStorage.removeItem('octava_staff_token');
       if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';
       }

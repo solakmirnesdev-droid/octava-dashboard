@@ -5,8 +5,8 @@ import { useAuthStore } from '../stores/auth';
 const auth = useAuthStore();
 const router = useRouter();
 
-function signOut() {
-  auth.logout();
+async function signOut() {
+  await auth.logout();
   router.push({ name: 'login' });
 }
 </script>
@@ -28,7 +28,7 @@ function signOut() {
         </nav>
 
         <div class="ml-auto flex items-center gap-4 text-sm">
-          <span class="text-black/50">{{ auth.user?.email }}</span>
+          <span class="text-black/50">{{ auth.user?.name || auth.user?.email }}</span>
           <button class="hover:text-accent" @click="signOut">Odjava</button>
         </div>
       </div>

@@ -13,8 +13,15 @@ const CHORD_TOKEN = /\[([^\]]*)\]/g;
 const CHORD_SHAPE = /^([A-H])([#b]?)([^/]*)(?:\/([A-H])([#b]?))?$/;
 const CHORD_SUFFIX = /^(?:maj|min|m|M|dim|aug|sus|add|alt|°|ø|Δ|\+|-|[0-9#b()])*$/;
 
-const SHARP_SCALE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const FLAT_SCALE = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+/**
+ * Output alphabet, ex-Yugoslav convention: sharps throughout, and H where the
+ * Anglo system writes B. That makes the twelfth degree H and pushes B flat onto
+ * A#, so the two systems never collide on the letter B.
+ *
+ * Input is more forgiving than output — Bb, B and H are all understood when
+ * reading a chart, but only this spelling is ever written back.
+ */
+const SHARP_SCALE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H'];
 /**
  * Conventional spelling for every key, following the circle of fifths.
  *
@@ -23,14 +30,9 @@ const FLAT_SCALE = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 
  * so Db wins; C#m is four sharps where Dbm is eight flats, so C#m wins. The two
  * tables below encode which spelling a musician actually expects.
  */
-const MAJOR_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
-const MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'Bbm', 'Bm'];
+const MAJOR_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H'];
+const MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Hm'];
 
-/** Keys whose signature is written with flats. Everything else uses sharps. */
-const FLAT_KEYS = new Set([
-  'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb',
-  'Dm', 'Gm', 'Cm', 'Fm', 'Bbm', 'Ebm', 'Abm'
-]);
 
 /** Splits a key name into its pitch class and mode. */
 function parseKey(key) {
@@ -53,13 +55,12 @@ export function transposeKey(key, semitones) {
   return parsed.isMinor ? MINOR_KEYS[target] : MAJOR_KEYS[target];
 }
 
-/** Whether a chart in this key should be written with flats. */
-export function prefersFlats(key) {
-  return FLAT_KEYS.has((key || '').trim());
-}
 
 function noteToIndex(letter, accidental) {
-  if (letter === 'H') return SHARP_SCALE.indexOf('B');
+  // H and a bare B are the same pitch; a flattened B is a semitone below it.
+  if (letter === 'H') return 11;
+  if (letter === 'B') return accidental === 'b' ? 10 : 11;
+
   let base = SHARP_SCALE.indexOf(letter);
   if (base === -1) return -1;
   if (accidental === '#') base += 1;
@@ -76,7 +77,7 @@ export function isChord(symbol) {
   return noteToIndex(letter, accidental) !== -1;
 }
 
-export function transposeChord(chord, semitones, preferFlats = false) {
+export function transposeChord(chord, semitones) {
   const match = CHORD_SHAPE.exec(chord.trim());
   if (!match) return chord;
 
@@ -86,8 +87,7 @@ export function transposeChord(chord, semitones, preferFlats = false) {
   const rootIndex = noteToIndex(letter, accidental);
   if (rootIndex === -1) return chord;
 
-  const scale = preferFlats ? FLAT_SCALE : SHARP_SCALE;
-  const at = (i) => scale[(((i + semitones) % 12) + 12) % 12];
+  const at = (i) => SHARP_SCALE[(((i + semitones) % 12) + 12) % 12];
 
   let out = at(rootIndex) + (suffix || '');
 
@@ -127,7 +127,15 @@ export function parseSong(content) {
     const tail = line.slice(cursor);
     if (tail || pending) segments.push({ chord: pending, text: tail });
 
-    return { type: 'line', segments };
+    // A line carrying chords but no words is an instrumental run. Its columns
+    // mean nothing — there is no text to sit above — and rendering it by
+    // column collides the chords, since a two-character chord is wider than
+    // the single space separating it from the next.
+    const instrumental = segments.length > 0
+      && segments.some((s) => s.chord)
+      && segments.every((s) => !s.text.trim());
+
+    return { type: 'line', instrumental, segments };
   });
 }
 
@@ -157,12 +165,26 @@ export function transposeContent(content, semitones, originalKey) {
   const shift = ((semitones % 12) + 12) % 12;
   if (shift === 0) return content;
 
-  const targetKey = originalKey ? transposeKey(originalKey, semitones) : null;
-  // With no key to go on, descending reads more naturally in flats.
-  const preferFlats = targetKey ? prefersFlats(targetKey) : semitones < 0;
-
   return content.replace(CHORD_TOKEN, (token, inner) => {
     if (!inner.trim()) return token;
-    return '[' + transposeChord(inner, shift, preferFlats) + ']';
+    return '[' + transposeChord(inner, shift) + ']';
+  });
+}
+
+/**
+ * Rewrites every chord into the ex-Yugoslav alphabet, leaving pitch untouched.
+ *
+ * Transposition already respells as a side effect, but a song shown at its
+ * original key never passes through it — so anything stored as B, Bb or Eb
+ * would keep the spelling it was typed in. This runs on display so the sheet
+ * reads the same whatever notation the source used.
+ */
+export function normalizeNotation(content) {
+  if (!content) return content;
+
+  return content.replace(CHORD_TOKEN, (token, inner) => {
+    const symbol = inner.trim();
+    if (!isChord(symbol)) return token;
+    return '[' + transposeChord(symbol, 0) + ']';
   });
 }
