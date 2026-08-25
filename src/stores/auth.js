@@ -11,6 +11,14 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => Boolean(token.value));
   const isAdmin = computed(() => user.value?.role === 'admin');
 
+  /**
+   * Same ranking the server applies. Comparing positions rather than matching
+   * a role means superadmin passes an admin check without being listed.
+   */
+  const RANKS = { worker: 1, admin: 2, superadmin: 3 };
+  const hasRole = (minimum) => (RANKS[user.value?.role] || 0) >= (RANKS[minimum] || 99);
+  const isSuperadmin = computed(() => hasRole('superadmin'));
+
   async function login(email, password) {
     loading.value = true;
     error.value = null;
@@ -50,5 +58,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, loading, error, isAuthenticated, isAdmin, login, fetchMe, logout };
+  return {
+    token, user, loading, error,
+    isAuthenticated, isAdmin, isSuperadmin, hasRole,
+    login, fetchMe, logout
+  };
 });
