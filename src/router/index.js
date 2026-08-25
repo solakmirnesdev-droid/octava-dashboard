@@ -7,7 +7,8 @@ const routes = [
     path: '/',
     component: () => import('../layouts/DashboardLayout.vue'),
     children: [
-      { path: '', redirect: '/songs' },
+      { path: '', redirect: '/stats' },
+      { path: 'stats', name: 'stats', component: () => import('../views/StatsView.vue') },
       { path: 'songs', name: 'songs', component: () => import('../views/SongsView.vue') },
       { path: 'songs/new', name: 'song-new', component: () => import('../views/SongEditorView.vue') },
       { path: 'songs/:id/edit', name: 'song-edit', component: () => import('../views/SongEditorView.vue'), props: true },

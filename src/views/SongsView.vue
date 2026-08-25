@@ -1,26 +1,86 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, watch, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import client from '../api/client';
 
+const router = useRouter();
+
 const songs = ref([]);
+const meta = ref(null);
 const loading = ref(true);
 const error = ref(null);
+const busyId = ref(null);
 
-onMounted(async () => {
+const page = ref(1);
+const status = ref('');
+
+const FILTERS = [
+  { key: '', label: 'Sve' },
+  { key: 'published', label: 'Objavljeno' },
+  { key: 'draft', label: 'Na čekanju' }
+];
+
+async function load() {
+  loading.value = true;
+  error.value = null;
   try {
-    const { data } = await client.get('/songs', { params: { limit: 50 } });
+    const { data } = await client.get('/songs', {
+      params: { page: page.value, limit: 25, status: status.value || undefined }
+    });
     songs.value = data.songs || [];
+    meta.value = data.meta;
   } catch (err) {
     error.value = err.response?.data?.message || 'Učitavanje nije uspjelo.';
   } finally {
     loading.value = false;
   }
-});
+}
+
+watch([page, status], load);
+onMounted(load);
+
+function setFilter(key) {
+  status.value = key;
+  page.value = 1;
+}
+
+const edit = (song) => router.push({ name: 'song-edit', params: { id: song._id } });
+
+/**
+ * Publishing is reversible and instant, so the row updates before the request
+ * returns and rolls back if it fails. Waiting on the round trip for something
+ * this small makes the whole list feel unresponsive.
+ */
+async function toggleStatus(song) {
+  const previous = song.status;
+  const next = previous === 'published' ? 'draft' : 'published';
+
+  song.status = next;
+  busyId.value = song._id;
+
+  try {
+    await client.put(`/songs/${song._id}`, { status: next });
+
+    // A song filtered out by the change should leave the list it no longer
+    // belongs in, rather than sitting there contradicting the filter.
+    if (status.value && status.value !== next) {
+      songs.value = songs.value.filter((s) => s._id !== song._id);
+    }
+  } catch (err) {
+    song.status = previous;
+    error.value = err.response?.data?.message || 'Promjena statusa nije uspjela.';
+  } finally {
+    busyId.value = null;
+  }
+}
 </script>
 
 <template>
   <div class="mb-6 flex items-center justify-between">
-    <h1 class="text-xl font-semibold tracking-tight">Pjesme</h1>
+    <h1 class="text-xl font-semibold tracking-tight">
+      Pjesme
+      <span v-if="meta" class="ml-2 font-mono text-sm font-normal text-black/40">{{ meta.total }}</span>
+    </h1>
     <RouterLink
       :to="{ name: 'song-new' }"
       class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent"
@@ -29,11 +89,18 @@ onMounted(async () => {
     </RouterLink>
   </div>
 
+  <div class="mb-4 flex gap-2 border-b border-black/10 pb-3 text-sm">
+    <button
+      v-for="filter in FILTERS" :key="filter.key"
+      class="rounded px-3 py-1"
+      :class="status === filter.key ? 'bg-ink text-white' : 'text-black/55 hover:text-accent'"
+      @click="setFilter(filter.key)"
+    >{{ filter.label }}</button>
+  </div>
+
+  <p v-if="error" class="mb-4 rounded bg-accent/10 px-4 py-2 text-sm text-accent">{{ error }}</p>
   <p v-if="loading" class="text-sm text-black/50">Učitavanje…</p>
-  <p v-else-if="error" class="text-sm text-accent">{{ error }}</p>
-  <p v-else-if="!songs.length" class="text-sm text-black/50">
-    Još nema unesenih pjesama.
-  </p>
+  <p v-else-if="!songs.length" class="text-sm text-black/50">Nema pjesama za ovaj filter.</p>
 
   <table v-else class="w-full text-sm">
     <thead class="border-b border-black/10 text-left text-xs uppercase tracking-wide text-black/40">
@@ -42,26 +109,60 @@ onMounted(async () => {
         <th class="py-2">Izvođač</th>
         <th class="py-2">Tonalitet</th>
         <th class="py-2">Status</th>
+        <th class="py-2 text-right">Radnja</th>
       </tr>
     </thead>
     <tbody>
-      <tr v-for="song in songs" :key="song._id" class="border-b border-black/5 hover:bg-black/[0.02]">
+      <!-- The whole row opens the editor. The title alone gave no sign it was
+           clickable, which is why editing looked like it was missing. -->
+      <tr
+        v-for="song in songs" :key="song._id"
+        class="group cursor-pointer border-b border-black/5 hover:bg-black/[0.02]"
+        @click="edit(song)"
+      >
         <td class="py-2.5">
-          <RouterLink :to="{ name: 'song-edit', params: { id: song._id } }" class="hover:text-accent">
+          <span class="font-medium underline decoration-black/15 decoration-dotted underline-offset-4 group-hover:text-accent group-hover:decoration-accent/40">
             {{ song.title }}
-          </RouterLink>
+          </span>
         </td>
         <td class="py-2.5 text-black/60">{{ song.artist?.name }}</td>
         <td class="py-2.5 font-mono text-black/60">{{ song.originalKey }}</td>
         <td class="py-2.5">
           <span
             class="rounded px-2 py-0.5 text-xs"
-            :class="song.status === 'published' ? 'bg-green-100 text-green-800' : 'bg-black/5 text-black/50'"
+            :class="song.status === 'published' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'"
           >
-            {{ song.status === 'published' ? 'Objavljeno' : 'Skica' }}
+            {{ song.status === 'published' ? 'Objavljeno' : 'Na čekanju' }}
           </span>
+        </td>
+        <td class="py-2.5 text-right">
+          <!-- Stop the click here, or every status change would also navigate
+               away to the editor. -->
+          <button
+            class="rounded border px-2.5 py-1 text-xs transition disabled:opacity-40"
+            :class="song.status === 'published'
+              ? 'border-black/15 text-black/60 hover:border-amber-500 hover:text-amber-700'
+              : 'border-black/15 text-black/60 hover:border-green-600 hover:text-green-700'"
+            :disabled="busyId === song._id"
+            :title="song.status === 'published' ? 'Skini s objave' : 'Objavi'"
+            @click.stop="toggleStatus(song)"
+          >
+            {{ song.status === 'published' ? 'Skini s objave' : 'Objavi' }}
+          </button>
         </td>
       </tr>
     </tbody>
   </table>
+
+  <nav v-if="meta && meta.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
+    <button
+      class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
+      :disabled="page <= 1" @click="page--"
+    >Prethodna</button>
+    <span class="text-black/50">{{ meta.page }} / {{ meta.pages }}</span>
+    <button
+      class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
+      :disabled="page >= meta.pages" @click="page++"
+    >Sljedeća</button>
+  </nav>
 </template>

@@ -19,6 +19,9 @@ async function signOut() {
         <span class="rounded bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">Dashboard</span>
 
         <nav class="flex gap-6 text-sm">
+          <RouterLink :to="{ name: 'stats' }" class="hover:text-accent" active-class="text-accent font-medium">
+            Statistika
+          </RouterLink>
           <RouterLink :to="{ name: 'songs' }" class="hover:text-accent" active-class="text-accent font-medium">
             Pjesme
           </RouterLink>
