@@ -1,6 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import client from '../api/client';
+import IconViews from '~icons/material-symbols/visibility-rounded';
+import IconSaved from '~icons/material-symbols/favorite-rounded';
+import IconRate from '~icons/material-symbols/trending-up-rounded';
+import IconSongs from '~icons/material-symbols/queue-music-rounded';
 
 const overview = ref(null);
 const songs = ref([]);
@@ -63,20 +67,20 @@ function changeSort(key) {
 
   <div v-if="overview" class="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="text-xs uppercase tracking-wide text-black/40">Pregleda</p>
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40"><IconViews /> Pregleda</p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.views) }}</p>
     </div>
     <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="text-xs uppercase tracking-wide text-black/40">Sačuvano</p>
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40"><IconSaved /> Sačuvano</p>
       <p class="mt-1 font-mono text-2xl font-semibold text-accent">{{ number(overview.favorites) }}</p>
     </div>
     <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="text-xs uppercase tracking-wide text-black/40">Stopa čuvanja</p>
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40"><IconRate /> Stopa čuvanja</p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ percent(overview.saveRate) }}</p>
       <p class="mt-0.5 text-xs text-black/40">koliko pregleda završi sačuvano</p>
     </div>
     <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="text-xs uppercase tracking-wide text-black/40">Pjesama</p>
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40"><IconSongs /> Pjesama</p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.published) }}</p>
       <p class="mt-0.5 text-xs text-black/40">+ {{ overview.drafts }} skica</p>
     </div>

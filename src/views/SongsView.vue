@@ -3,6 +3,11 @@ import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
+import IconAdd from '~icons/material-symbols/add-rounded';
+import IconPublish from '~icons/material-symbols/visibility-rounded';
+import IconUnpublish from '~icons/material-symbols/visibility-off-rounded';
+import IconPrev from '~icons/material-symbols/chevron-left-rounded';
+import IconNext from '~icons/material-symbols/chevron-right-rounded';
 
 const router = useRouter();
 const toasts = useToasts();
@@ -92,9 +97,9 @@ async function toggleStatus(song) {
     </h1>
     <RouterLink
       :to="{ name: 'song-new' }"
-      class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent"
+      class="flex items-center gap-1.5 rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent"
     >
-      Nova pjesma
+      <IconAdd /> Nova pjesma
     </RouterLink>
   </div>
 
@@ -155,7 +160,10 @@ async function toggleStatus(song) {
             :title="song.status === 'published' ? 'Skini s objave' : 'Objavi'"
             @click.stop="toggleStatus(song)"
           >
-            {{ song.status === 'published' ? 'Skini s objave' : 'Objavi' }}
+            <span class="flex items-center gap-1">
+              <component :is="song.status === 'published' ? IconUnpublish : IconPublish" />
+              {{ song.status === 'published' ? 'Skini s objave' : 'Objavi' }}
+            </span>
           </button>
         </td>
       </tr>
@@ -166,11 +174,11 @@ async function toggleStatus(song) {
     <button
       class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
       :disabled="page <= 1" @click="page--"
-    >Prethodna</button>
+    ><span class="flex items-center gap-1"><IconPrev /> Prethodna</span></button>
     <span class="text-black/50">{{ meta.page }} / {{ meta.pages }}</span>
     <button
       class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
       :disabled="page >= meta.pages" @click="page++"
-    >Sljedeća</button>
+    ><span class="flex items-center gap-1">Sljedeća <IconNext /></span></button>
   </nav>
 </template>

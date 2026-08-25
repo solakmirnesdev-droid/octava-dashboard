@@ -1,5 +1,10 @@
 <script setup>
 import { useToasts } from '../composables/useToasts';
+import IconSuccess from '~icons/material-symbols/check-circle-rounded';
+import IconError from '~icons/material-symbols/error-rounded';
+import IconInfo from '~icons/material-symbols/info-rounded';
+
+const ICONS = { success: IconSuccess, error: IconError, info: IconInfo };
 
 const { items, dismiss } = useToasts();
 
@@ -36,29 +41,12 @@ const ICON_COLOUR = {
         class="pointer-events-auto flex items-start gap-2.5 rounded-lg border px-4 py-3 shadow-lg"
         :class="STYLES[toast.type]"
       >
-        <svg
-          v-if="toast.type === 'success'" class="mt-0.5 shrink-0" :class="ICON_COLOUR[toast.type]"
-          width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        <component
+          :is="ICONS[toast.type]"
+          class="mt-0.5 shrink-0"
+          :class="ICON_COLOUR[toast.type]"
           aria-hidden="true"
-        >
-          <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <svg
-          v-else-if="toast.type === 'error'" class="mt-0.5 shrink-0" :class="ICON_COLOUR[toast.type]"
-          width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 8v5M12 16.5v.01" stroke-linecap="round" />
-        </svg>
-        <svg
-          v-else class="mt-0.5 shrink-0" :class="ICON_COLOUR[toast.type]"
-          width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 11v5M12 7.5v.01" stroke-linecap="round" />
-        </svg>
+        />
 
         <div class="min-w-0 flex-1 text-sm">
           <p class="font-medium leading-snug">{{ toast.message }}</p>

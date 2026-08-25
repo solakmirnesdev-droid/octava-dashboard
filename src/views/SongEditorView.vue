@@ -7,6 +7,8 @@ import ImportPanel from '../components/ImportPanel.vue';
 import ChordLineEditor from '../components/ChordLineEditor.vue';
 import { extractChords } from '../utils/chordpro';
 import { useToasts } from '../composables/useToasts';
+import IconDraft from '~icons/material-symbols/save-rounded';
+import IconPublish from '~icons/material-symbols/publish-rounded';
 
 const props = defineProps({ id: { type: String, default: null } });
 const router = useRouter();
@@ -120,13 +122,15 @@ async function save(status) {
         class="rounded border border-black/15 px-4 py-2 text-sm hover:border-accent"
         :disabled="saving" @click="save('draft')"
       >
-        Sačuvaj skicu
+        <span class="flex items-center gap-1.5"><IconDraft /> Sačuvaj skicu</span>
       </button>
       <button
         class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
         :disabled="saving" @click="save('published')"
       >
-        {{ saving ? 'Spašavanje…' : 'Objavi' }}
+        <span class="flex items-center gap-1.5">
+          <IconPublish /> {{ saving ? 'Spašavanje…' : 'Objavi' }}
+        </span>
       </button>
     </div>
   </div>
