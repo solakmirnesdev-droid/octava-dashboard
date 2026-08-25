@@ -2,13 +2,14 @@
 import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import client from '../api/client';
+import { useToasts } from '../composables/useToasts';
 
 const router = useRouter();
+const toasts = useToasts();
 
 const songs = ref([]);
 const meta = ref(null);
 const loading = ref(true);
-const error = ref(null);
 const busyId = ref(null);
 
 const page = ref(1);
@@ -22,7 +23,6 @@ const FILTERS = [
 
 async function load() {
   loading.value = true;
-  error.value = null;
   try {
     const { data } = await client.get('/songs', {
       params: { page: page.value, limit: 25, status: status.value || undefined }
@@ -30,7 +30,7 @@ async function load() {
     songs.value = data.songs || [];
     meta.value = data.meta;
   } catch (err) {
-    error.value = err.response?.data?.message || 'Učitavanje nije uspjelo.';
+    toasts.error(err.response?.data?.message || 'Učitavanje nije uspjelo.');
   } finally {
     loading.value = false;
   }
@@ -66,9 +66,18 @@ async function toggleStatus(song) {
     if (status.value && status.value !== next) {
       songs.value = songs.value.filter((s) => s._id !== song._id);
     }
+
+    // Naming the song matters: the row may have just scrolled away or been
+    // filtered out, and "saved" alone does not say what was saved.
+    toasts.success(
+      next === 'published' ? `Objavljeno: ${song.title}` : `Skinuto s objave: ${song.title}`,
+      { detail: song.artist?.name }
+    );
   } catch (err) {
     song.status = previous;
-    error.value = err.response?.data?.message || 'Promjena statusa nije uspjela.';
+    toasts.error(err.response?.data?.message || 'Promjena statusa nije uspjela.', {
+      detail: song.title
+    });
   } finally {
     busyId.value = null;
   }
@@ -98,7 +107,6 @@ async function toggleStatus(song) {
     >{{ filter.label }}</button>
   </div>
 
-  <p v-if="error" class="mb-4 rounded bg-accent/10 px-4 py-2 text-sm text-accent">{{ error }}</p>
   <p v-if="loading" class="text-sm text-black/50">Učitavanje…</p>
   <p v-else-if="!songs.length" class="text-sm text-black/50">Nema pjesama za ovaj filter.</p>
 

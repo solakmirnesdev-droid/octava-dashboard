@@ -6,10 +6,12 @@ import ChordSheet from '../components/ChordSheet.vue';
 import ImportPanel from '../components/ImportPanel.vue';
 import ChordLineEditor from '../components/ChordLineEditor.vue';
 import { extractChords } from '../utils/chordpro';
+import { useToasts } from '../composables/useToasts';
 
 const props = defineProps({ id: { type: String, default: null } });
 const router = useRouter();
 const editor = useTemplateRef('editor');
+const toasts = useToasts();
 
 const KEYS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B',
               'Am', 'Bm', 'Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m'];
@@ -46,7 +48,7 @@ onMounted(async () => {
       genres: (data.song.genres || []).map((g) => g.slug || g)
     };
   } catch (err) {
-    error.value = err.response?.data?.message || 'Pjesma nije pronađena.';
+    toasts.error(err.response?.data?.message || 'Pjesma nije pronađena.');
   }
 });
 
@@ -87,12 +89,21 @@ async function save(status) {
   error.value = null;
   try {
     const payload = { ...form.value, status };
+    const creating = !props.id;
     const { data } = props.id
       ? await client.put(`/songs/${props.id}`, payload)
       : await client.post('/songs', payload);
+
+    toasts.success(
+      status === 'published'
+        ? `Objavljeno: ${data.song.title}`
+        : (creating ? `Skica sačuvana: ${data.song.title}` : `Izmjene sačuvane: ${data.song.title}`),
+      { detail: data.song.artist?.name }
+    );
+
     router.push({ name: 'song-edit', params: { id: data.song._id } });
   } catch (err) {
-    error.value = err.response?.data?.message || 'Spašavanje nije uspjelo.';
+    toasts.error(err.response?.data?.message || 'Spašavanje nije uspjelo.');
   } finally {
     saving.value = false;
   }

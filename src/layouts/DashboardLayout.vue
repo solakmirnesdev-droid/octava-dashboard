@@ -1,6 +1,7 @@
 <script setup>
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import ToastStack from '../components/ToastStack.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -40,5 +41,7 @@ async function signOut() {
     <main class="mx-auto max-w-6xl px-6 py-8">
       <RouterView />
     </main>
+
+    <ToastStack />
   </div>
 </template>
