@@ -72,6 +72,11 @@ onMounted(async () => {
       genres: (data.song.genres || []).map((g) => g.slug || g)
     };
     arrangements.value = data.song.arrangements || [];
+    // Stored as a bare id, shown as a link — that is the form an editor
+    // recognises and can open to check they pasted the right video.
+    form.value.youtube = data.song.youtubeId
+      ? `https://www.youtube.com/watch?v=${data.song.youtubeId}`
+      : '';
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Pjesma nije pronađena.');
   }
@@ -181,6 +186,15 @@ async function save(status) {
       <span class="text-sm font-medium">Kapodaster</span>
       <input v-model.number="form.capo" type="number" min="0" max="12"
              class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent" />
+    </label>
+
+    <label class="block lg:col-span-2">
+      <span class="text-sm font-medium">YouTube <span class="font-normal text-black/40">(nije obavezno)</span></span>
+      <input
+        v-model="form.youtube"
+        placeholder="Zalijepi link — youtube.com/watch?v=… ili youtu.be/…"
+        class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent"
+      >
     </label>
   </div>
 
