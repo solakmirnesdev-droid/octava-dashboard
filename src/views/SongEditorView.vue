@@ -5,6 +5,7 @@ import client from '../api/client';
 import ChordSheet from '../components/ChordSheet.vue';
 import ImportPanel from '../components/ImportPanel.vue';
 import ChordLineEditor from '../components/ChordLineEditor.vue';
+import ArrangementsPanel from '../components/ArrangementsPanel.vue';
 import { extractChords } from '../utils/chordpro';
 import { useToasts } from '../composables/useToasts';
 import IconDraft from '~icons/material-symbols/save-rounded';
@@ -15,8 +16,14 @@ const router = useRouter();
 const editor = useTemplateRef('editor');
 const toasts = useToasts();
 
-const KEYS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B',
-              'Am', 'Bm', 'Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m'];
+/**
+ * AI-TRAP: our notation, not the American one. H is the twelfth degree and
+ * sharps are written instead of flats — this list offered Bb and B while every
+ * page in the app renders A# and H, so an editor picked a key the reader never
+ * sees. The importer still understands the American spelling on the way in.
+ */
+const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H',
+              'Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Hm'];
 
 const form = ref({
   title: '', artist: '', originalKey: 'Am', capo: 0,
@@ -30,6 +37,21 @@ const saving = ref(false);
 const error = ref(null);
 
 const usedChords = computed(() => extractChords(form.value.content));
+
+/** Kept beside the form rather than inside it: the panel owns these. */
+const arrangements = ref([]);
+
+/**
+ * The panel returns the whole song after every change, so the form follows the
+ * primary along with it — otherwise promoting a different version would leave
+ * the textarea showing text that is no longer the one being edited.
+ */
+function onArrangementsChanged(song) {
+  arrangements.value = song.arrangements || [];
+  form.value.content = song.content;
+  form.value.originalKey = song.originalKey;
+  form.value.capo = song.capo;
+}
 
 onMounted(async () => {
   try {
@@ -49,6 +71,7 @@ onMounted(async () => {
       // The API returns populated genre objects; the form works in slugs.
       genres: (data.song.genres || []).map((g) => g.slug || g)
     };
+    arrangements.value = data.song.arrangements || [];
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Pjesma nije pronađena.');
   }
@@ -160,6 +183,23 @@ async function save(status) {
              class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent" />
     </label>
   </div>
+
+  <!-- Only for a saved song: versions hang off an id that does not exist yet
+
+       while the first one is still being written. -->
+
+  <ArrangementsPanel
+
+    v-if="props.id"
+
+    :song-id="props.id"
+
+    :arrangements="arrangements"
+
+    @changed="onArrangementsChanged"
+
+  />
+
 
   <div class="mb-6">
     <span class="text-sm font-medium">Rubrike</span>
