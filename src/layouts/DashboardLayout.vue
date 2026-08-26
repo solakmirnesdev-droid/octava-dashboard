@@ -6,6 +6,7 @@ import IconStats from '~icons/material-symbols/bar-chart-rounded';
 import IconSongs from '~icons/material-symbols/queue-music-rounded';
 import IconArtists from '~icons/material-symbols/artist-rounded';
 import IconLogout from '~icons/material-symbols/logout-rounded';
+import IconLock from '~icons/material-symbols/lock-outline-rounded';
 import IconAccounts from '~icons/material-symbols/manage-accounts-rounded';
 import IconBell from '~icons/material-symbols/notifications-outline-rounded';
 import IconShield from '~icons/material-symbols/shield-outline-rounded';
@@ -91,6 +92,23 @@ async function signOut() {
               {{ auth.user.role }}
             </span>
           </span>
+          <!-- Beside the account name rather than in the section nav: this is
+               about you, not about the catalogue. The dot marks an account
+               still held by a password alone. -->
+          <RouterLink
+            :to="{ name: 'security' }"
+            class="relative flex items-center gap-1.5 hover:text-accent"
+            active-class="text-accent font-medium"
+            title="Sigurnost naloga"
+          >
+            <IconLock />
+            <span
+              v-if="!auth.user?.totpEnabled"
+              class="absolute -right-1 -top-0.5 size-1.5 rounded-full bg-accent"
+              aria-label="Dvostruka potvrda nije uključena"
+            />
+          </RouterLink>
+
           <button class="flex items-center gap-1.5 hover:text-accent" @click="signOut">
             <IconLogout /> Odjava
           </button>

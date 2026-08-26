@@ -14,6 +14,13 @@ const routes = [
       { path: 'songs/:id/edit', name: 'song-edit', component: () => import('../views/SongEditorView.vue'), props: true },
       { path: 'artists', name: 'artists', component: () => import('../views/ArtistsView.vue') },
       {
+        // Everyone on the desk, not just admins: securing your own account
+        // is not a privileged act.
+        path: 'security',
+        name: 'security',
+        component: () => import('../views/SecurityView.vue')
+      },
+      {
         path: 'reports',
         name: 'reports',
         component: () => import('../views/ReportsView.vue')
