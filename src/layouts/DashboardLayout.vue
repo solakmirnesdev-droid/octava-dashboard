@@ -7,9 +7,20 @@ import IconSongs from '~icons/material-symbols/queue-music-rounded';
 import IconArtists from '~icons/material-symbols/artist-rounded';
 import IconLogout from '~icons/material-symbols/logout-rounded';
 import IconAccounts from '~icons/material-symbols/manage-accounts-rounded';
+import IconBell from '~icons/material-symbols/notifications-outline-rounded';
+import IconShield from '~icons/material-symbols/shield-outline-rounded';
+import IconBug from '~icons/material-symbols/bug-report-outline-rounded';
+import { onMounted, onBeforeUnmount } from 'vue';
+import { useNotificationsStore } from '../stores/notifications';
 
 const auth = useAuthStore();
 const router = useRouter();
+const notifications = useNotificationsStore();
+
+// Polled while the dashboard is open and stopped when it is not, so a tab left
+// on a second monitor is not still asking every minute tomorrow morning.
+onMounted(() => notifications.startPolling());
+onBeforeUnmount(() => notifications.stopPolling());
 
 async function signOut() {
   await auth.logout();
@@ -34,6 +45,35 @@ async function signOut() {
           <RouterLink :to="{ name: 'artists' }" class="flex items-center gap-1.5 hover:text-accent" active-class="text-accent font-medium">
             <IconArtists /> Izvođači
           </RouterLink>
+          <RouterLink
+            :to="{ name: 'reports' }"
+            class="flex items-center gap-1.5 hover:text-accent"
+            active-class="text-accent font-medium"
+          >
+            <IconBug /> Prijave
+          </RouterLink>
+
+          <RouterLink
+            v-if="auth.hasRole('admin')"
+            :to="{ name: 'moderation' }"
+            class="flex items-center gap-1.5 hover:text-accent"
+            active-class="text-accent font-medium"
+          >
+            <IconShield /> Moderacija
+          </RouterLink>
+
+          <RouterLink
+            :to="{ name: 'notifications' }"
+            class="flex items-center gap-1.5 hover:text-accent"
+            active-class="text-accent font-medium"
+          >
+            <IconBell /> Obavještenja
+            <span
+              v-if="notifications.unread"
+              class="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium leading-none text-white"
+            >{{ notifications.unread > 99 ? '99+' : notifications.unread }}</span>
+          </RouterLink>
+
           <RouterLink
             v-if="auth.isSuperadmin"
             :to="{ name: 'accounts' }"

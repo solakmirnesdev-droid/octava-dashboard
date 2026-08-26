@@ -14,6 +14,23 @@ const routes = [
       { path: 'songs/:id/edit', name: 'song-edit', component: () => import('../views/SongEditorView.vue'), props: true },
       { path: 'artists', name: 'artists', component: () => import('../views/ArtistsView.vue') },
       {
+        path: 'reports',
+        name: 'reports',
+        component: () => import('../views/ReportsView.vue')
+      },
+      {
+        path: 'notifications',
+        name: 'notifications',
+        component: () => import('../views/NotificationsView.vue')
+      },
+      {
+        path: 'moderation',
+        name: 'moderation',
+        component: () => import('../views/ModerationView.vue'),
+        // Hiding what a reader wrote is a heavier act than adding a song.
+        meta: { minimumRole: 'admin' }
+      },
+      {
         path: 'accounts',
         name: 'accounts',
         component: () => import('../views/AccountsView.vue'),
