@@ -92,6 +92,22 @@ the action means (`hover:border-ok`, `hover:border-danger`).
 
 ## 5. Decision log
 
+### 2026-08-27 — One dialog for both surfaces
+- **What:** `AppModal.vue`, byte-identical in octava-app and octava-dashboard,
+  replacing seven window.confirm/prompt calls and two hand-rolled overlays.
+- **Why:** a native confirm cannot be styled, ignores the theme the reader
+  chose, and on a phone renders as a system sheet that looks like it came from
+  somewhere else. More to the point it is a yes/no with no room to say what is
+  about to happen — which is exactly what a destructive action needs. Purging a
+  song now shows the title beside the field that asks you to type it; a
+  window.prompt could not.
+- **Identical on purpose,** imports and all, so a fix in one is a copy away from
+  the other. It uses explicit `import { ref, … } from 'vue'` even though Nuxt
+  would auto-import them, because that is what makes the file portable.
+- **Affects:** `LogoutButton`, `SongReviews`, `ReviewComments`, `ReportProblem`
+  in the app; `ArrangementsPanel`, `BulkBar`, `TrashView`, `ArtistsView`,
+  `SecurityView`, `ModerationView` in the dashboard.
+
 ### 2026-08-27 — Bulk edits go through the API, not the database
 - **What:** `components/BulkBar.vue` plus `POST /songs/bulk` — status, genre, tag
   and delete across a selection.
@@ -120,6 +136,31 @@ the action means (`hover:border-ok`, `hover:border-danger`).
 
 ## 6. Traps & gotchas
 
+### An ASCII quote inside a template literal ends the HTML attribute
+- **Symptom:** the dashboard would not compile — "Unterminated template" in
+  ArtistsView, pointing at a line that looked fine.
+- **Cause:** `:description="… `„${name}" …`"`. The straight quote closing the
+  Bosnian pair terminated the attribute long before Vue saw the backtick.
+- **Fix:** the typographic closing quote, which is the right character anyway.
+- **Files:** `views/ArtistsView.vue`, `components/ArrangementsPanel.vue`.
+
+### A scroll lock counter cannot live inside the component
+- **Symptom:** scrolling came back while a dialog was still covering the page.
+- **Cause:** the counter was declared in `<script setup>`, so every AppModal had
+  its own. Several are mounted at once — the layout renders one LogoutButton for
+  the desktop nav and another for the mobile drawer — and Teleport lifts each
+  dialog out of its hidden container, so more than one can be live.
+- **Fix:** the count lives on `document.body.dataset.modalCount`.
+- **Files:** `components/AppModal.vue`.
+
+### A dialog whose leave transition never finishes freezes the page
+- **Symptom:** in a tab that is not compositing, `transitionend` never fires, so
+  Vue never removes the element. A `fixed inset-0` overlay at opacity 0 then
+  swallows every click with nothing on screen to explain it.
+- **Fix:** the leave state also sets `pointer-events-none`, so a stalled overlay
+  is at worst invisible rather than page-breaking.
+- **Files:** `components/AppModal.vue`.
+
 ### The artist grid silently showed only the first 100 of 139
 - **Symptom:** 39 artists could not be edited, given a country, or given a
   photograph. Nothing on the page suggested more existed.
@@ -128,6 +169,15 @@ the action means (`hover:border-ok`, `hover:border-danger`).
 - **Fix:** `fetchAllArtists()` follows `meta.pages`. Any view that lists
   something unpaginated needs the same treatment.
 - **Files:** `views/ArtistsView.vue`.
+
+### A soft delete needs somewhere to undo it, every time
+- **Symptom:** deleting a version kept its ratings but the panel offered no way
+  back, so from the editor's side it was indistinguishable from destruction.
+- **Fix:** `ArrangementsPanel` lists removed versions with what they still hold
+  and a restore button, and the confirm text says what actually happens rather
+  than the old warning about votes being deleted.
+- **Note:** the same rule applies to anything else given a soft delete here.
+- **Files:** `components/ArrangementsPanel.vue`.
 
 ### Selection must not survive a filter change
 - **Symptom:** none yet — this is why `SongsView` clears it.
