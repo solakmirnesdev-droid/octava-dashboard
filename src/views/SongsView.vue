@@ -1,8 +1,10 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
+import { useAuthStore } from '../stores/auth';
+import BulkBar from '../components/BulkBar.vue';
 import IconAdd from '~icons/material-symbols/add-rounded';
 import IconPublish from '~icons/material-symbols/visibility-rounded';
 import IconUnpublish from '~icons/material-symbols/visibility-off-rounded';
@@ -16,6 +18,33 @@ const songs = ref([]);
 const meta = ref(null);
 const loading = ref(true);
 const busyId = ref(null);
+
+const auth = useAuthStore();
+const genres = ref([]);
+
+/**
+ * The selection, by id.
+ *
+ * AI-NOTE: cleared whenever the page or filter changes. Carrying it across a
+ * filter would let somebody publish rows they can no longer see, which is the
+ * one thing a bulk edit must never do.
+ */
+const selected = ref(new Set());
+
+const selectedIds = computed(() => [...selected.value]);
+const allOnPage = computed(() =>
+  songs.value.length > 0 && songs.value.every((s) => selected.value.has(s._id))
+);
+
+function toggle(id) {
+  const next = new Set(selected.value);
+  next.has(id) ? next.delete(id) : next.add(id);
+  selected.value = next;
+}
+
+function toggleAll() {
+  selected.value = allOnPage.value ? new Set() : new Set(songs.value.map((s) => s._id));
+}
 
 const page = ref(1);
 const status = ref('');
@@ -41,8 +70,25 @@ async function load() {
   }
 }
 
-watch([page, status], load);
-onMounted(load);
+watch([page, status], () => {
+  selected.value = new Set();
+  load();
+});
+
+onMounted(async () => {
+  await load();
+  try {
+    const { data } = await client.get('/genres');
+    genres.value = data.genres || [];
+  } catch {
+    // The bulk bar degrades to status and tags; not worth a toast on a list view.
+  }
+});
+
+async function afterBulk() {
+  selected.value = new Set();
+  await load();
+}
 
 function setFilter(key) {
   status.value = key;
@@ -93,31 +139,37 @@ async function toggleStatus(song) {
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold tracking-tight">
       Pjesme
-      <span v-if="meta" class="ml-2 font-mono text-sm font-normal text-black/40">{{ meta.total }}</span>
+      <span v-if="meta" class="ml-2 font-mono text-sm font-normal text-faint">{{ meta.total }}</span>
     </h1>
     <RouterLink
       :to="{ name: 'song-new' }"
-      class="flex items-center gap-1.5 rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent"
+      class="flex items-center gap-1.5 rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent"
     >
       <IconAdd /> Nova pjesma
     </RouterLink>
   </div>
 
-  <div class="mb-4 flex gap-2 border-b border-black/10 pb-3 text-sm">
+  <div class="mb-4 flex gap-2 border-b border-line pb-3 text-sm">
     <button
       v-for="filter in FILTERS" :key="filter.key"
       class="rounded px-3 py-1"
-      :class="status === filter.key ? 'bg-ink text-white' : 'text-black/55 hover:text-accent'"
+      :class="status === filter.key ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
       @click="setFilter(filter.key)"
     >{{ filter.label }}</button>
   </div>
 
-  <p v-if="loading" class="text-sm text-black/50">Učitavanje…</p>
-  <p v-else-if="!songs.length" class="text-sm text-black/50">Nema pjesama za ovaj filter.</p>
+  <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
+  <p v-else-if="!songs.length" class="text-sm text-muted">Nema pjesama za ovaj filter.</p>
 
   <table v-else class="w-full text-sm">
-    <thead class="border-b border-black/10 text-left text-xs uppercase tracking-wide text-black/40">
+    <thead class="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
       <tr>
+        <th class="w-8 py-2">
+          <input
+            type="checkbox" :checked="allOnPage" class="accent-accent"
+            aria-label="Izaberi sve na stranici" @change="toggleAll"
+          >
+        </th>
         <th class="py-2">Naslov</th>
         <th class="py-2">Izvođač</th>
         <th class="py-2">Tonalitet</th>
@@ -130,20 +182,27 @@ async function toggleStatus(song) {
            clickable, which is why editing looked like it was missing. -->
       <tr
         v-for="song in songs" :key="song._id"
-        class="group cursor-pointer border-b border-black/5 hover:bg-black/[0.02]"
+        class="group cursor-pointer border-b border-line-soft hover:bg-raised"
         @click="edit(song)"
       >
+        <!-- Stop here, or ticking a box would also open the editor. -->
+        <td class="py-2.5" @click.stop>
+          <input
+            type="checkbox" :checked="selected.has(song._id)" class="accent-accent"
+            :aria-label="`Izaberi ${song.title}`" @change="toggle(song._id)"
+          >
+        </td>
         <td class="py-2.5">
-          <span class="font-medium underline decoration-black/15 decoration-dotted underline-offset-4 group-hover:text-accent group-hover:decoration-accent/40">
+          <span class="font-medium underline decoration-line-strong decoration-dotted underline-offset-4 group-hover:text-accent group-hover:decoration-accent/40">
             {{ song.title }}
           </span>
         </td>
-        <td class="py-2.5 text-black/60">{{ song.artist?.name }}</td>
-        <td class="py-2.5 font-mono text-black/60">{{ song.originalKey }}</td>
+        <td class="py-2.5 text-muted">{{ song.artist?.name }}</td>
+        <td class="py-2.5 font-mono text-muted">{{ song.originalKey }}</td>
         <td class="py-2.5">
           <span
             class="rounded px-2 py-0.5 text-xs"
-            :class="song.status === 'published' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'"
+            :class="song.status === 'published' ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'"
           >
             {{ song.status === 'published' ? 'Objavljeno' : 'Na čekanju' }}
           </span>
@@ -154,8 +213,8 @@ async function toggleStatus(song) {
           <button
             class="rounded border px-2.5 py-1 text-xs transition disabled:opacity-40"
             :class="song.status === 'published'
-              ? 'border-black/15 text-black/60 hover:border-amber-500 hover:text-amber-700'
-              : 'border-black/15 text-black/60 hover:border-green-600 hover:text-green-700'"
+              ? 'border-line-strong text-muted hover:border-warn hover:text-warn'
+              : 'border-line-strong text-muted hover:border-ok hover:text-ok'"
             :disabled="busyId === song._id"
             :title="song.status === 'published' ? 'Skini s objave' : 'Objavi'"
             @click.stop="toggleStatus(song)"
@@ -170,14 +229,23 @@ async function toggleStatus(song) {
     </tbody>
   </table>
 
+  <BulkBar
+    v-if="selectedIds.length"
+    :ids="selectedIds"
+    :genres="genres"
+    :can-delete="auth.hasRole('admin')"
+    @done="afterBulk"
+    @clear="selected = new Set()"
+  />
+
   <nav v-if="meta && meta.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
     <button
-      class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
+      class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
       :disabled="page <= 1" @click="page--"
     ><span class="flex items-center gap-1"><IconPrev /> Prethodna</span></button>
-    <span class="text-black/50">{{ meta.page }} / {{ meta.pages }}</span>
+    <span class="text-muted">{{ meta.page }} / {{ meta.pages }}</span>
     <button
-      class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
+      class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
       :disabled="page >= meta.pages" @click="page++"
     ><span class="flex items-center gap-1">Sljedeća <IconNext /></span></button>
   </nav>

@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import ToastStack from '../components/ToastStack.vue';
+import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import IconStats from '~icons/material-symbols/bar-chart-rounded';
 import IconSongs from '~icons/material-symbols/queue-music-rounded';
 import IconArtists from '~icons/material-symbols/artist-rounded';
@@ -11,6 +12,8 @@ import IconAccounts from '~icons/material-symbols/manage-accounts-rounded';
 import IconBell from '~icons/material-symbols/notifications-outline-rounded';
 import IconShield from '~icons/material-symbols/shield-outline-rounded';
 import IconBug from '~icons/material-symbols/bug-report-outline-rounded';
+import IconTrash from '~icons/material-symbols/delete-outline-rounded';
+import IconHistory from '~icons/material-symbols/history-rounded';
 import { onMounted, onBeforeUnmount } from 'vue';
 import { useNotificationsStore } from '../stores/notifications';
 
@@ -31,10 +34,10 @@ async function signOut() {
 
 <template>
   <div class="min-h-screen bg-surface text-ink">
-    <header class="border-b border-black/10 bg-white">
+    <header class="border-b border-line bg-panel">
       <div class="mx-auto flex max-w-6xl items-center gap-8 px-6 py-4">
         <span class="text-lg font-semibold tracking-tight">Octava</span>
-        <span class="rounded bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">Dashboard</span>
+        <span class="rounded bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">Dashboard</span>
 
         <nav class="flex gap-6 text-sm">
           <RouterLink :to="{ name: 'stats' }" class="flex items-center gap-1.5 hover:text-accent" active-class="text-accent font-medium">
@@ -64,6 +67,24 @@ async function signOut() {
           </RouterLink>
 
           <RouterLink
+            v-if="auth.hasRole('admin')"
+            :to="{ name: 'trash' }"
+            class="flex items-center gap-1.5 hover:text-accent"
+            active-class="text-accent font-medium"
+          >
+            <IconTrash /> Korpa
+          </RouterLink>
+
+          <RouterLink
+            v-if="auth.hasRole('admin')"
+            :to="{ name: 'audit' }"
+            class="flex items-center gap-1.5 hover:text-accent"
+            active-class="text-accent font-medium"
+          >
+            <IconHistory /> Trag
+          </RouterLink>
+
+          <RouterLink
             :to="{ name: 'notifications' }"
             class="flex items-center gap-1.5 hover:text-accent"
             active-class="text-accent font-medium"
@@ -71,7 +92,7 @@ async function signOut() {
             <IconBell /> Obavještenja
             <span
               v-if="notifications.unread"
-              class="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium leading-none text-white"
+              class="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium leading-none text-on-accent"
             >{{ notifications.unread > 99 ? '99+' : notifications.unread }}</span>
           </RouterLink>
 
@@ -86,9 +107,9 @@ async function signOut() {
         </nav>
 
         <div class="ml-auto flex items-center gap-4 text-sm">
-          <span class="text-black/50">
+          <span class="text-muted">
             {{ auth.user?.name || auth.user?.email }}
-            <span v-if="auth.user?.role" class="ml-1 rounded bg-black/5 px-1.5 py-0.5 text-[10px] uppercase">
+            <span v-if="auth.user?.role" class="ml-1 rounded bg-raised px-1.5 py-0.5 text-[10px] uppercase">
               {{ auth.user.role }}
             </span>
           </span>
@@ -108,6 +129,8 @@ async function signOut() {
               aria-label="Dvostruka potvrda nije uključena"
             />
           </RouterLink>
+
+          <ThemeSwitcher />
 
           <button class="flex items-center gap-1.5 hover:text-accent" @click="signOut">
             <IconLogout /> Odjava

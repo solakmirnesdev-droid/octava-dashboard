@@ -31,6 +31,20 @@ const routes = [
         component: () => import('../views/NotificationsView.vue')
       },
       {
+        // Restoring is an admin act because deleting is, and a worker who could
+        // undo a deletion could also undo an admin's decision to make it.
+        path: 'trash',
+        name: 'trash',
+        component: () => import('../views/TrashView.vue'),
+        meta: { minimumRole: 'admin' }
+      },
+      {
+        path: 'audit',
+        name: 'audit',
+        component: () => import('../views/AuditView.vue'),
+        meta: { minimumRole: 'admin' }
+      },
+      {
         path: 'moderation',
         name: 'moderation',
         component: () => import('../views/ModerationView.vue'),
