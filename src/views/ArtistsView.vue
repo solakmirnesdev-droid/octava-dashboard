@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { initials, avatarStyle } from '../utils/avatar';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import IconAdd from '~icons/material-symbols/add-circle-outline-rounded';
@@ -43,6 +44,15 @@ const artists = ref([]);
 const genres = ref([]);
 const loading = ref(true);
 const filter = ref('');
+
+/**
+ * Narrows the grid to artists with no photograph.
+ *
+ * AI-NOTE: 139 artists, none of them with an image. Without a way to see who is
+ * still missing one, filling them in means scrolling the whole grid and holding
+ * the answer in your head — so nobody does it. See AI-NOTES.md §7.
+ */
+const missingImage = ref(false);
 const saving = ref(false);
 
 /** null = closed, {} = creating, {…} = editing. */
@@ -56,18 +66,40 @@ const apiBase = import.meta.env.VITE_API_URL || '/api';
 
 const visible = computed(() => {
   const q = filter.value.trim().toLowerCase();
-  if (!q) return artists.value;
-  return artists.value.filter((a) => a.name.toLowerCase().includes(q));
+  return artists.value.filter(
+    (a) => a.name.toLowerCase().includes(q) && (!missingImage.value || !a.hasImage)
+  );
 });
+
+/**
+ * Every artist, not the first hundred.
+ *
+ * AI-TRAP: this used to be a single request with `limit: 100`, which is the
+ * API's maximum. With 139 artists in the catalogue that silently hid 39 of them
+ * — they could not be edited, given a country, or given a photograph, and
+ * nothing on the page said a page two existed. The cap is right; the client has
+ * to walk the pages.
+ */
+async function fetchAllArtists() {
+  const out = [];
+  let page = 1;
+  let pages = 1;
+
+  do {
+    const { data } = await client.get('/artists', { params: { page, limit: 100 } });
+    out.push(...(data.artists || []));
+    pages = data.meta?.pages || 1;
+    page += 1;
+  } while (page <= pages);
+
+  return out;
+}
 
 async function load() {
   loading.value = true;
   try {
-    const [{ data: a }, { data: g }] = await Promise.all([
-      client.get('/artists', { params: { limit: 100 } }),
-      client.get('/genres')
-    ]);
-    artists.value = a.artists || [];
+    const [all, { data: g }] = await Promise.all([fetchAllArtists(), client.get('/genres')]);
+    artists.value = all;
     genres.value = g.genres || [];
   } catch {
     toasts.error('Učitavanje nije uspjelo.');
@@ -180,6 +212,8 @@ async function removeImage() {
   }
 }
 
+const withoutImage = computed(() => artists.value.filter((a) => !a.hasImage).length);
+
 const imageUrl = (a) => `${apiBase}/artists/${a._id}/image?v=${imageVersion.value}`;
 
 onMounted(load);
@@ -189,14 +223,27 @@ onMounted(load);
   <section>
     <div class="mb-6 flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold tracking-tight">Izvođači</h1>
-      <span class="text-sm text-black/45">{{ artists.length }}</span>
+      <span class="text-sm text-faint">{{ artists.length }}</span>
+
+      <button
+        type="button"
+        class="rounded border px-2.5 py-1 text-xs transition"
+        :class="missingImage
+          ? 'border-accent bg-accent-soft text-accent'
+          : 'border-line-strong text-muted hover:border-accent hover:text-accent'"
+        :title="'Prikaži samo izvođače bez slike'"
+        @click="missingImage = !missingImage"
+      >
+        bez slike
+        <span class="ml-1 font-mono">{{ withoutImage }}</span>
+      </button>
 
       <input
         v-model="filter" placeholder="Filtriraj po imenu"
-        class="ml-auto w-56 rounded border border-black/15 px-3 py-2 text-sm outline-none focus:border-accent"
+        class="ml-auto w-56 rounded border border-line-strong px-3 py-2 text-sm outline-none focus:border-accent"
       >
       <button
-        class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent"
+        class="rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent"
         @click="startCreate"
       >
         <span class="flex items-center gap-1.5"><IconAdd /> Novi izvođač</span>
@@ -215,7 +262,7 @@ onMounted(load);
           <span class="text-sm font-medium">Ime</span>
           <input
             v-model="form.name"
-            class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent"
+            class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
           >
         </label>
 
@@ -223,7 +270,7 @@ onMounted(load);
           <span class="text-sm font-medium">Zemlja</span>
           <select
             v-model="form.country"
-            class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent"
+            class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
           >
             <option value="">— bez zemlje —</option>
             <option v-for="c in COUNTRIES" :key="c.code" :value="c.code">
@@ -247,7 +294,7 @@ onMounted(load);
         <span class="text-sm font-medium">Biografija</span>
         <textarea
           v-model="form.bio" rows="3" maxlength="2000"
-          class="mt-1 w-full rounded border border-black/15 px-3 py-2 text-sm outline-none focus:border-accent"
+          class="mt-1 w-full rounded border border-line-strong px-3 py-2 text-sm outline-none focus:border-accent"
         />
       </label>
 
@@ -256,9 +303,9 @@ onMounted(load);
       <div v-if="editing._id" class="mt-4 flex flex-wrap items-center gap-4">
         <img
           v-if="editing.hasImage" :src="imageUrl(editing)" alt=""
-          class="size-16 rounded object-cover ring-1 ring-black/10"
+          class="size-16 rounded object-cover ring-1 ring-line"
         >
-        <div v-else class="flex size-16 items-center justify-center rounded bg-black/5 text-black/25">
+        <div v-else class="flex size-16 items-center justify-center rounded bg-raised text-dim">
           <IconPerson class="text-2xl" />
         </div>
 
@@ -266,55 +313,59 @@ onMounted(load);
           <input ref="fileInput" type="file" accept="image/webp" class="hidden" @change="pickImage">
           <div class="flex gap-2">
             <button
-              class="rounded border border-black/15 px-3 py-1.5 text-sm hover:border-accent"
+              class="rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent"
               @click="fileInput.click()"
             ><span class="flex items-center gap-1.5"><IconUpload /> Postavi sliku</span></button>
             <button
               v-if="editing.hasImage"
-              class="rounded border border-black/15 px-3 py-1.5 text-sm hover:border-rose-400 hover:text-rose-700"
+              class="rounded border border-line-strong px-3 py-1.5 text-sm hover:border-danger hover:text-danger"
               @click="removeImage"
             ><span class="flex items-center gap-1.5"><IconDelete /> Ukloni</span></button>
           </div>
-          <p class="mt-1 text-xs text-black/45">WebP, najviše 10 KB.</p>
+          <p class="mt-1 text-xs text-faint">WebP, najviše 10 KB.</p>
         </div>
       </div>
 
       <div class="mt-4 flex justify-end gap-2">
-        <button class="rounded px-4 py-2 text-sm text-black/60 hover:text-accent" @click="editing = null">
+        <button class="rounded px-4 py-2 text-sm text-muted hover:text-accent" @click="editing = null">
           Zatvori
         </button>
         <button
-          class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
+          class="rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
           :disabled="saving" @click="save"
         >{{ saving ? 'Spašavanje…' : 'Sačuvaj' }}</button>
       </div>
     </div>
 
-    <p v-if="loading" class="text-sm text-black/45">Učitavanje…</p>
+    <p v-if="loading" class="text-sm text-faint">Učitavanje…</p>
 
     <ul v-else class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       <li
         v-for="a in visible" :key="a._id"
-        class="flex items-center gap-3 rounded border border-black/10 bg-white px-3 py-2"
+        class="flex items-center gap-3 rounded border border-line bg-panel px-3 py-2"
       >
         <img
           v-if="a.hasImage" :src="imageUrl(a)" alt=""
-          class="size-10 shrink-0 rounded object-cover ring-1 ring-black/10"
+          class="size-10 shrink-0 rounded object-cover ring-1 ring-line"
         >
-        <div v-else class="flex size-10 shrink-0 items-center justify-center rounded bg-black/5 text-black/25">
-          <IconPerson />
-        </div>
+        <!-- The same stand-in the public site draws, so what a reviewer sees
+             here is what a reader sees there. -->
+        <div
+          v-else
+          :style="avatarStyle(a.name)"
+          class="flex size-10 shrink-0 items-center justify-center rounded text-sm font-semibold ring-1 ring-line"
+        >{{ initials(a.name) }}</div>
 
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium">
             <span v-if="a.flag" class="mr-1">{{ a.flag }}</span>{{ a.name }}
           </p>
-          <p class="text-xs text-black/45">{{ a.songCount }} pjesama</p>
+          <p class="text-xs text-faint">{{ a.songCount }} pjesama</p>
         </div>
 
-        <button class="text-xs text-black/45 hover:text-accent" @click="startEdit(a)">Uredi</button>
+        <button class="text-xs text-faint hover:text-accent" @click="startEdit(a)">Uredi</button>
         <button
-          class="text-xs text-black/35 hover:text-rose-700"
+          class="text-xs text-faint hover:text-danger"
           :title="a.songCount ? 'Ima pjesama — prvo ih prebaci' : 'Obriši'"
           @click="removeArtist(a)"
         >Obriši</button>
