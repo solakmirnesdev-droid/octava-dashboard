@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue';
+import AppModal from '../components/AppModal.vue';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import IconHide from '~icons/material-symbols/visibility-off-outline-rounded';
@@ -177,26 +178,22 @@ onMounted(load);
 
     <!-- Hiding always asks why: a reason nobody has to give is a reason nobody
          gives, and the next editor is left guessing. -->
-    <div v-if="hiding" class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
-      <div class="w-full max-w-md rounded-lg bg-panel p-5 shadow-xl">
-        <h2 class="text-sm font-semibold">Razlog sakrivanja</h2>
-        <p class="mt-1 truncate text-xs text-faint">{{ hiding.body }}</p>
-
-        <textarea
-          v-model="reason" rows="3" maxlength="500" autofocus
-          class="mt-3 w-full rounded border border-line-strong px-3 py-2 text-sm outline-none focus:border-accent"
-          placeholder="npr. uvredljiv sadržaj, spam, nije o pjesmi"
-        />
-
-        <div class="mt-4 flex justify-end gap-2 text-sm">
-          <button class="rounded px-3 py-1.5 text-muted hover:text-accent" @click="hiding = null">Odustani</button>
-          <button
-            class="rounded bg-accent px-3 py-1.5 text-on-accent disabled:opacity-40"
-            :disabled="!reason.trim()"
-            @click="confirmHide"
-          >Sakrij</button>
-        </div>
-      </div>
-    </div>
+    <AppModal
+      :model-value="Boolean(hiding)"
+      title="Razlog sakrivanja"
+      description="Razlog vidi samo osoblje, ali ostaje zapisan uz radnju."
+      confirm-label="Sakrij"
+      tone="danger"
+      :confirm-disabled="!reason.trim()"
+      @update:model-value="(open) => { if (!open) hiding = null; }"
+      @confirm="confirmHide()"
+    >
+      <p class="mb-2 truncate text-xs text-faint">{{ hiding?.body }}</p>
+      <textarea
+        v-model="reason" rows="3" maxlength="500"
+        class="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
+        placeholder="npr. uvredljiv sadržaj, spam, nije o pjesmi"
+      />
+    </AppModal>
   </section>
 </template>

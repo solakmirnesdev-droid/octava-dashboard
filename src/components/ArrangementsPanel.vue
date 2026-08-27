@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import AppModal from './AppModal.vue';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import IconAdd from '~icons/material-symbols/add-circle-outline-rounded';
@@ -35,6 +36,28 @@ const DIFFICULTIES = [
 const adding = ref(false);
 const busy = ref(false);
 const draft = ref({ label: '', originalKey: 'Am', capo: 0, difficulty: 'medium', content: '' });
+
+/**
+ * Versions that were removed but not destroyed.
+ *
+ * AI-NOTE: deleting a version keeps its ratings now — other people's judgement
+ * of whether the chart was right, gathered over time, which is the part nobody
+ * can retype. A recoverable delete with nowhere to undo it is worse than a
+ * permanent one, because it looks like data loss and is not.
+ */
+const removed = ref([]);
+
+async function loadRemoved() {
+  try {
+    const { data } = await client.get(`/songs/${props.songId}/arrangements/removed`);
+    removed.value = data.arrangements || [];
+  } catch {
+    // A song that never had one deleted is the normal case; not worth a toast.
+    removed.value = [];
+  }
+}
+
+onMounted(loadRemoved);
 
 const atLimit = computed(() => props.arrangements.length >= 6);
 
@@ -75,13 +98,26 @@ const makePrimary = (a) => run(
   `„${a.label}" je sada glavna verzija.`
 );
 
+/** The version the dialog is asking about; null while it is closed. */
+const confirming = ref(null);
+
 async function remove(a) {
-  if (!confirm(`Obrisati verziju „${a.label}"? Glasovi za nju se brišu s njom.`)) return;
-  await run(
+  const ok = await run(
     () => client.delete(`/songs/${props.songId}/arrangements/${a._id}`),
-    'Verzija obrisana.'
+    'Verzija obrisana. Može se vratiti ispod.'
   );
+  if (ok) await loadRemoved();
 }
+
+async function restore(a) {
+  const ok = await run(
+    () => client.post(`/songs/${props.songId}/arrangements/${a._id}/restore`),
+    `„${a.label}" je vraćena.`
+  );
+  if (ok) await loadRemoved();
+}
+
+const whenRemoved = (iso) => new Date(iso).toLocaleString('bs');
 
 const scoreOf = (a) => (a.ratingCount ? `★ ${Number(a.rating).toFixed(1)} (${a.ratingCount})` : 'bez ocjena');
 const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
@@ -133,7 +169,7 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
             class="rounded border border-line-strong px-2.5 py-1 text-sm hover:border-accent disabled:opacity-50"
             :disabled="busy || arrangements.length <= 1"
             :title="arrangements.length <= 1 ? 'Posljednja verzija se ne može obrisati.' : ''"
-            @click="remove(a)"
+            @click="confirming = a"
           ><span class="flex items-center gap-1.5"><IconDelete /> Obriši</span></button>
         </span>
       </li>
@@ -188,5 +224,43 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
         >{{ busy ? 'Spašavanje…' : 'Dodaj verziju' }}</button>
       </div>
     </div>
+
+    <!-- Only present once something is actually in it. -->
+    <div v-if="removed.length" class="mt-4 rounded border border-line-soft p-3">
+      <h3 class="mb-2 text-xs font-medium uppercase tracking-wide text-faint">
+        Obrisane verzije ({{ removed.length }})
+      </h3>
+
+      <ul class="space-y-1.5">
+        <li
+          v-for="a in removed" :key="a._id"
+          class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+        >
+          <span class="font-medium text-muted">{{ a.label }}</span>
+          <span class="font-mono text-xs text-faint">{{ a.originalKey }}</span>
+          <span v-if="a.ratingCount" class="text-xs text-faint">{{ a.ratingCount }} ocjena sačuvano</span>
+          <span class="font-mono text-xs text-dim">{{ whenRemoved(a.deletedAt) }}</span>
+
+          <button
+            class="ml-auto rounded border border-line-strong px-2.5 py-1 text-xs text-muted
+                   transition hover:border-ok hover:text-ok disabled:opacity-40"
+            :disabled="busy || atLimit"
+            :title="atLimit ? 'Pjesma već ima šest verzija' : 'Vrati ovu verziju'"
+            @click="restore(a)"
+          >Vrati</button>
+        </li>
+      </ul>
+    </div>
+
+    <AppModal
+      :model-value="Boolean(confirming)"
+      title="Obrisati verziju?"
+      :description="confirming ? `„${confirming.label}“ odlazi sa sajta, ali ostaje ovdje ispod. Ocjene se čuvaju.` : ''"
+      confirm-label="Obriši"
+      tone="danger"
+      :busy="busy"
+      @update:model-value="(open) => { if (!open) confirming = null; }"
+      @confirm="() => { const a = confirming; confirming = null; remove(a); }"
+    />
   </section>
 </template>

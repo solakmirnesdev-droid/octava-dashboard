@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import { useAuthStore } from '../stores/auth';
+import AppModal from '../components/AppModal.vue';
 import IconRestore from '~icons/material-symbols/restore-from-trash-rounded';
 import IconPurge from '~icons/material-symbols/delete-forever-outline-rounded';
 import IconPrev from '~icons/material-symbols/chevron-left-rounded';
@@ -61,19 +62,30 @@ async function restore(song) {
   }
 }
 
-async function purge(song) {
-  // The only irreversible action left in the tool, so it asks for the title
-  // rather than a yes: a confirm dialog is muscle memory by the second one.
-  const typed = window.prompt(
-    `Trajno ukloniti "${song.title}"?\n\n`
-    + 'Ovo se ne može poništiti — ocjene i recenzije nestaju s pjesmom.\n'
-    + 'Upiši naslov pjesme da potvrdiš:'
-  );
-  if (typed === null) return;
+/**
+ * The only irreversible action left in the tool.
+ *
+ * AI-DECISION: it asks for the title to be typed rather than for a yes. A
+ * confirm is muscle memory by the second one, and this takes the song's ratings
+ * and reviews with it. Typing the title is a deliberate act that cannot be done
+ * by reflex — and the dialog can show the title beside the field, which a
+ * window.prompt could not.
+ */
+const purging = ref(null);
+const typed = ref('');
 
-  if (typed.trim() !== song.title.trim()) {
-    return toasts.error('Naslov se ne poklapa. Ništa nije uklonjeno.');
-  }
+const titleMatches = computed(() =>
+  purging.value && typed.value.trim() === purging.value.title.trim());
+
+function askPurge(song) {
+  purging.value = song;
+  typed.value = '';
+}
+
+async function purge() {
+  const song = purging.value;
+  if (!song || !titleMatches.value) return;
+  purging.value = null;
 
   busyId.value = song._id;
   try {
@@ -136,7 +148,7 @@ async function purge(song) {
               class="flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
                      transition hover:border-danger hover:text-danger disabled:opacity-40"
               :disabled="busyId === song._id"
-              @click="purge(song)"
+              @click="askPurge(song)"
             ><IconPurge /> Ukloni trajno</button>
           </div>
         </td>
@@ -155,4 +167,27 @@ async function purge(song) {
       :disabled="page >= meta.pages" @click="turn(page + 1)"
     ><span class="flex items-center gap-1">Sljedeća <IconNext /></span></button>
   </nav>
+
+  <AppModal
+    :model-value="Boolean(purging)"
+    title="Trajno ukloniti?"
+    description="Ovo se ne može poništiti. Ocjene i recenzije nestaju zajedno s pjesmom."
+    confirm-label="Ukloni trajno"
+    tone="danger"
+    :confirm-disabled="!titleMatches"
+    :busy="Boolean(busyId)"
+    @update:model-value="(open) => { if (!open) purging = null; }"
+    @confirm="purge"
+  >
+    <label for="confirm-title" class="mb-1 block text-xs text-faint">
+      Upiši naslov da potvrdiš:
+    </label>
+    <p class="mb-2 font-medium">{{ purging?.title }}</p>
+    <input
+      id="confirm-title" v-model="typed" type="text" autocomplete="off"
+      class="w-full rounded border px-3 py-2 outline-none"
+      :class="titleMatches ? 'border-ok' : 'border-line-strong focus:border-accent'"
+      @keyup.enter="titleMatches && purge()"
+    >
+  </AppModal>
 </template>

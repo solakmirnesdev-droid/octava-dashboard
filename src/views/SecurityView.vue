@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
+import AppModal from '../components/AppModal.vue';
 import client from '../api/client';
 import { useAuthStore } from '../stores/auth';
 import { useToasts } from '../composables/useToasts';
@@ -84,8 +85,9 @@ async function regenerate() {
   }
 }
 
+const disabling = ref(false);
+
 async function disable() {
-  if (!confirm('Isključiti dvostruku potvrdu? Nalog ostaje zaštićen samo lozinkom.')) return;
   busy.value = true;
   try {
     await client.post('/auth/staff/2fa/disable', {
@@ -284,11 +286,21 @@ function finishCodes() {
             </label>
             <button
               class="rounded border border-line-strong px-4 py-2 text-sm hover:border-danger hover:text-danger disabled:opacity-50"
-              :disabled="busy || !password || code.trim().length < 6" @click="disable"
+              :disabled="busy || !password || code.trim().length < 6" @click="disabling = true"
             >Isključi</button>
           </div>
         </div>
       </template>
     </div>
-  </section>
+  
+    <AppModal
+      v-model="disabling"
+      title="Isključiti dvostruku potvrdu?"
+      description="Nalog ostaje zaštićen samo lozinkom. Rezervni kodovi prestaju vrijediti."
+      confirm-label="Isključi"
+      tone="danger"
+      :busy="busy"
+      @confirm="() => { disabling = false; disable(); }"
+    />
+</section>
 </template>

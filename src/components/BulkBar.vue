@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
+import AppModal from './AppModal.vue';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import IconPublish from '~icons/material-symbols/visibility-rounded';
@@ -69,14 +70,10 @@ function applyTag(action) {
   run(action, value, action === 'addTag' ? `imaju tag ${value}` : `nemaju tag ${value}`);
 }
 
+const asking = ref(false);
+
 function remove() {
-  // Deletion is recoverable now, so this asks once rather than making people
-  // type the word "obriši" — but it still asks, because 200 rows is 200 rows.
-  const ok = window.confirm(
-    `Poslati ${count.value} ${count.value === 1 ? 'pjesmu' : 'pjesama'} u korpu?\n\n`
-    + 'Mogu se vratiti iz korpe.'
-  );
-  if (ok) run('delete', null, 'su obrisane');
+  asking.value = true;
 }
 </script>
 
@@ -151,5 +148,15 @@ function remove() {
       :class="canDelete ? '' : 'ml-auto'"
       :disabled="busy" @click="emit('clear')"
     ><IconClose /> Poništi izbor</button>
+
+    <AppModal
+      v-model="asking"
+      title="Poslati u korpu?"
+      :description="`${count} ${count === 1 ? 'pjesma ide' : 'pjesama ide'} u korpu. Mogu se vratiti odande u svakom trenutku.`"
+      confirm-label="Obriši"
+      tone="danger"
+      :busy="busy"
+      @confirm="() => { asking = false; run('delete', null, 'su obrisane'); }"
+    />
   </div>
 </template>

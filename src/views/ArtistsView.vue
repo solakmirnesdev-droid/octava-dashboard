@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import AppModal from '../components/AppModal.vue';
 import { initials, avatarStyle } from '../utils/avatar';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
@@ -147,8 +148,9 @@ async function save() {
   }
 }
 
+const removingArtist = ref(null);
+
 async function removeArtist(a) {
-  if (!confirm(`Obrisati izvođača „${a.name}"?`)) return;
   try {
     await client.delete(`/artists/${a._id}`);
     toasts.success('Obrisan.');
@@ -367,9 +369,19 @@ onMounted(load);
         <button
           class="text-xs text-faint hover:text-danger"
           :title="a.songCount ? 'Ima pjesama — prvo ih prebaci' : 'Obriši'"
-          @click="removeArtist(a)"
+          @click="removingArtist = a"
         >Obriši</button>
       </li>
     </ul>
+
+    <AppModal
+      :model-value="Boolean(removingArtist)"
+      title="Obrisati izvođača?"
+      :description="removingArtist ? `„${removingArtist.name}“ se briše trajno. Ovo ne ide u korpu.` : ''"
+      confirm-label="Obriši"
+      tone="danger"
+      @update:model-value="(open) => { if (!open) removingArtist = null; }"
+      @confirm="() => { const a = removingArtist; removingArtist = null; removeArtist(a); }"
+    />
   </section>
 </template>
