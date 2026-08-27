@@ -51,19 +51,19 @@ onMounted(load);
   <section>
     <header class="mb-6 flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold tracking-tight">Obavještenja</h1>
-      <span v-if="store.unread" class="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-white">
+      <span v-if="store.unread" class="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-on-accent">
         {{ store.unread }} novo
       </span>
 
       <div class="ml-auto flex items-center gap-2">
         <button
-          class="rounded border border-black/15 px-3 py-1.5 text-sm hover:border-accent hover:text-accent"
-          :class="unreadOnly ? 'border-accent bg-accent text-white hover:text-white' : ''"
+          class="rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent hover:text-accent"
+          :class="unreadOnly ? 'border-accent bg-accent text-on-accent hover:text-on-accent' : ''"
           @click="toggleFilter"
         >{{ unreadOnly ? 'Samo nepročitana' : 'Sva' }}</button>
 
         <button
-          class="flex items-center gap-1.5 rounded border border-black/15 px-3 py-1.5 text-sm hover:border-accent hover:text-accent disabled:opacity-40"
+          class="flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent hover:text-accent disabled:opacity-40"
           :disabled="!store.unread"
           @click="markAll"
         >
@@ -72,27 +72,27 @@ onMounted(load);
       </div>
     </header>
 
-    <p v-if="store.loading" class="text-sm text-black/45">Učitavanje…</p>
+    <p v-if="store.loading" class="text-sm text-faint">Učitavanje…</p>
 
-    <p v-else-if="!store.items.length" class="rounded border border-black/10 bg-white px-4 py-8 text-center text-sm text-black/45">
+    <p v-else-if="!store.items.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
       {{ unreadOnly ? 'Nema nepročitanih obavještenja.' : 'Još nema obavještenja.' }}
     </p>
 
     <ul v-else class="space-y-2">
       <li
         v-for="n in store.items" :key="n._id"
-        class="flex items-start gap-3 rounded border bg-white px-4 py-3"
-        :class="n.read ? 'border-black/10' : 'border-accent/40 bg-accent/[0.03]'"
+        class="flex items-start gap-3 rounded border bg-panel px-4 py-3"
+        :class="n.read ? 'border-line' : 'border-accent/40 bg-accent/[0.03]'"
       >
-        <component :is="kind(n.type).icon" class="mt-0.5 shrink-0 text-lg text-black/40" />
+        <component :is="kind(n.type).icon" class="mt-0.5 shrink-0 text-lg text-faint" />
 
         <div class="min-w-0 flex-1">
           <p class="text-sm">
             <span class="font-medium">{{ kind(n.type).label }}</span>
-            <span v-if="n.song" class="text-black/50"> — {{ n.song.title }}</span>
+            <span v-if="n.song" class="text-muted"> — {{ n.song.title }}</span>
           </p>
-          <p v-if="n.summary" class="mt-0.5 truncate text-sm text-black/60">{{ n.summary }}</p>
-          <p class="mt-1 text-xs text-black/35">{{ when(n.createdAt) }}</p>
+          <p v-if="n.summary" class="mt-0.5 truncate text-sm text-muted">{{ n.summary }}</p>
+          <p class="mt-1 text-xs text-faint">{{ when(n.createdAt) }}</p>
         </div>
 
         <!-- An unread dot rather than a button: marking one read individually is
@@ -103,12 +103,12 @@ onMounted(load);
 
     <nav v-if="store.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
       <button
-        class="rounded border border-black/15 px-3 py-1.5 disabled:opacity-35"
+        class="rounded border border-line-strong px-3 py-1.5 disabled:opacity-35"
         :disabled="page <= 1" @click="page--; load()"
       >Prethodna</button>
-      <span class="text-black/45">{{ page }} / {{ store.pages }}</span>
+      <span class="text-faint">{{ page }} / {{ store.pages }}</span>
       <button
-        class="rounded border border-black/15 px-3 py-1.5 disabled:opacity-35"
+        class="rounded border border-line-strong px-3 py-1.5 disabled:opacity-35"
         :disabled="page >= store.pages" @click="page++; load()"
       >Sljedeća</button>
     </nav>

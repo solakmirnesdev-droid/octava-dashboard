@@ -9,15 +9,15 @@ const ICONS = { success: IconSuccess, error: IconError, info: IconInfo };
 const { items, dismiss } = useToasts();
 
 const STYLES = {
-  success: 'border-green-600/30 bg-green-50 text-green-900',
+  success: 'border-ok/30 bg-ok-soft text-ok',
   error: 'border-accent/40 bg-accent/5 text-accent',
-  info: 'border-black/15 bg-white text-ink'
+  info: 'border-line-strong bg-panel text-ink'
 };
 
 const ICON_COLOUR = {
-  success: 'text-green-600',
+  success: 'text-ok',
   error: 'text-accent',
-  info: 'text-black/40'
+  info: 'text-faint'
 };
 </script>
 

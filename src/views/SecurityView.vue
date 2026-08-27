@@ -137,12 +137,12 @@ function finishCodes() {
   <section class="mx-auto max-w-2xl">
     <h1 class="mb-6 text-xl font-semibold tracking-tight">Sigurnost</h1>
 
-    <div class="rounded border border-black/10 bg-white px-5 py-4">
+    <div class="rounded border border-line bg-panel px-5 py-4">
       <div class="flex flex-wrap items-center gap-3">
-        <IconShield class="text-xl" :class="enabled ? 'text-emerald-600' : 'text-black/30'" />
+        <IconShield class="text-xl" :class="enabled ? 'text-ok' : 'text-dim'" />
         <div>
           <p class="text-sm font-medium">Dvostruka potvrda</p>
-          <p class="text-xs text-black/50">
+          <p class="text-xs text-muted">
             {{ enabled
               ? 'Uključena — pri prijavi se traži kod iz aplikacije.'
               : 'Isključena — nalog čuva samo lozinka.' }}
@@ -150,40 +150,40 @@ function finishCodes() {
         </div>
         <span
           class="ml-auto rounded-full px-2 py-0.5 text-xs font-medium"
-          :class="enabled ? 'bg-emerald-50 text-emerald-800' : 'bg-black/5 text-black/50'"
+          :class="enabled ? 'bg-ok-soft text-ok' : 'bg-raised text-muted'"
         >{{ enabled ? 'aktivna' : 'neaktivna' }}</span>
       </div>
 
       <!-- Off, nothing started ------------------------------------------- -->
       <template v-if="!enabled && stage === 'idle'">
-        <p class="mt-4 text-sm text-black/70">
+        <p class="mt-4 text-sm text-body">
           Trebat će ti aplikacija za kodove na telefonu — Google Authenticator,
           Aegis, 1Password ili slična.
         </p>
         <button
-          class="mt-4 rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
+          class="mt-4 rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
           :disabled="busy" @click="startSetup"
         >{{ busy ? 'Trenutak…' : 'Uključi' }}</button>
       </template>
 
       <!-- Scanning -------------------------------------------------------- -->
       <template v-else-if="stage === 'scanning'">
-        <p class="mt-4 text-sm text-black/70">
+        <p class="mt-4 text-sm text-body">
           Skeniraj kod aplikacijom, pa upiši šestocifreni broj koji ti pokaže.
         </p>
 
         <div class="mt-4 flex flex-wrap items-start gap-5">
-          <img v-if="qr" :src="qr" alt="QR kod za postavljanje" class="size-40 rounded border border-black/10">
+          <img v-if="qr" :src="qr" alt="QR kod za postavljanje" class="size-40 rounded border border-line">
 
           <div class="min-w-0">
-            <p class="text-xs font-medium text-black/60">Ako skeniranje ne radi, upiši ključ ručno:</p>
-            <code class="mt-1 block break-all rounded bg-black/5 px-2 py-1 font-mono text-xs">{{ secret }}</code>
+            <p class="text-xs font-medium text-muted">Ako skeniranje ne radi, upiši ključ ručno:</p>
+            <code class="mt-1 block break-all rounded bg-raised px-2 py-1 font-mono text-xs">{{ secret }}</code>
 
             <label class="mt-4 block">
               <span class="text-sm font-medium">Kod iz aplikacije</span>
               <input
                 v-model="code" inputmode="numeric" maxlength="6" placeholder="123456"
-                class="mt-1 w-40 rounded border border-black/15 px-3 py-2 font-mono tracking-widest outline-none focus:border-accent"
+                class="mt-1 w-40 rounded border border-line-strong px-3 py-2 font-mono tracking-widest outline-none focus:border-accent"
                 @keyup.enter="confirmEnable"
               >
             </label>
@@ -191,9 +191,9 @@ function finishCodes() {
         </div>
 
         <div class="mt-4 flex gap-2">
-          <button class="rounded px-4 py-2 text-sm text-black/60 hover:text-accent" @click="reset">Odustani</button>
+          <button class="rounded px-4 py-2 text-sm text-muted hover:text-accent" @click="reset">Odustani</button>
           <button
-            class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
+            class="rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
             :disabled="busy || code.trim().length < 6" @click="confirmEnable"
           >{{ busy ? 'Provjeravam…' : 'Potvrdi' }}</button>
         </div>
@@ -201,9 +201,9 @@ function finishCodes() {
 
       <!-- Backup codes, shown exactly once -------------------------------- -->
       <template v-else-if="stage === 'codes'">
-        <div class="mt-4 rounded border border-amber-300 bg-amber-50 px-4 py-3">
-          <p class="text-sm font-medium text-amber-900">Ovo je jedini put da vidiš ove kodove.</p>
-          <p class="mt-1 text-sm text-amber-900/80">
+        <div class="mt-4 rounded border border-warn bg-warn-soft px-4 py-3">
+          <p class="text-sm font-medium text-warn">Ovo je jedini put da vidiš ove kodove.</p>
+          <p class="mt-1 text-sm text-warn/80">
             Poslije ovoga u bazi ostaju samo njihovi otisci. Ako izgubiš telefon
             i nemaš kodove, u nalog se ne može ući.
           </p>
@@ -212,17 +212,17 @@ function finishCodes() {
         <ul class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
           <li
             v-for="(c, i) in backupCodes" :key="c"
-            class="rounded bg-black/5 px-3 py-2 text-center font-mono text-sm"
+            class="rounded bg-raised px-3 py-2 text-center font-mono text-sm"
           >
-            <span class="mr-1 text-black/30">{{ i + 1 }}.</span>{{ c }}
+            <span class="mr-1 text-dim">{{ i + 1 }}.</span>{{ c }}
           </li>
         </ul>
 
         <div class="mt-4 flex flex-wrap gap-2">
-          <button class="rounded border border-black/15 px-4 py-2 text-sm hover:border-accent" @click="copyCodes">
+          <button class="rounded border border-line-strong px-4 py-2 text-sm hover:border-accent" @click="copyCodes">
             <span class="flex items-center gap-1.5"><IconCopy /> Kopiraj</span>
           </button>
-          <button class="rounded border border-black/15 px-4 py-2 text-sm hover:border-accent" @click="downloadCodes">
+          <button class="rounded border border-line-strong px-4 py-2 text-sm hover:border-accent" @click="downloadCodes">
             <span class="flex items-center gap-1.5"><IconDownload /> Preuzmi</span>
           </button>
         </div>
@@ -233,30 +233,30 @@ function finishCodes() {
         </label>
 
         <button
-          class="mt-3 rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
+          class="mt-3 rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
           :disabled="!acknowledged" @click="finishCodes"
         >Gotovo</button>
       </template>
 
       <!-- On -------------------------------------------------------------- -->
       <template v-else-if="enabled">
-        <p class="mt-4 flex items-center gap-1.5 text-sm text-emerald-800">
+        <p class="mt-4 flex items-center gap-1.5 text-sm text-ok">
           <IconCheck /> Prijava traži kod iz aplikacije.
         </p>
 
-        <div class="mt-5 border-t border-black/10 pt-4">
+        <div class="mt-5 border-t border-line pt-4">
           <p class="text-sm font-medium">Novi rezervni kodovi</p>
-          <p class="mt-1 text-xs text-black/50">Pravljenje novih poništava sve stare.</p>
+          <p class="mt-1 text-xs text-muted">Pravljenje novih poništava sve stare.</p>
           <div class="mt-2 flex flex-wrap items-end gap-2">
             <label class="block">
-              <span class="text-xs font-medium text-black/60">Lozinka</span>
+              <span class="text-xs font-medium text-muted">Lozinka</span>
               <input
                 v-model="password" type="password" autocomplete="current-password"
-                class="mt-1 w-56 rounded border border-black/15 px-3 py-2 outline-none focus:border-accent"
+                class="mt-1 w-56 rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
               >
             </label>
             <button
-              class="rounded border border-black/15 px-4 py-2 text-sm hover:border-accent disabled:opacity-50"
+              class="rounded border border-line-strong px-4 py-2 text-sm hover:border-accent disabled:opacity-50"
               :disabled="busy || !password" @click="regenerate"
             >Napravi nove</button>
           </div>
@@ -264,26 +264,26 @@ function finishCodes() {
 
         <!-- Password as well as a code: a borrowed unlocked session should not
              be enough to strip the second factor off an account. -->
-        <div class="mt-5 border-t border-black/10 pt-4">
+        <div class="mt-5 border-t border-line pt-4">
           <p class="text-sm font-medium">Isključi dvostruku potvrdu</p>
-          <p class="mt-1 text-xs text-black/50">Traži i lozinku i kod.</p>
+          <p class="mt-1 text-xs text-muted">Traži i lozinku i kod.</p>
           <div class="mt-2 flex flex-wrap items-end gap-2">
             <label class="block">
-              <span class="text-xs font-medium text-black/60">Lozinka</span>
+              <span class="text-xs font-medium text-muted">Lozinka</span>
               <input
                 v-model="password" type="password" autocomplete="current-password"
-                class="mt-1 w-56 rounded border border-black/15 px-3 py-2 outline-none focus:border-accent"
+                class="mt-1 w-56 rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
               >
             </label>
             <label class="block">
-              <span class="text-xs font-medium text-black/60">Kod</span>
+              <span class="text-xs font-medium text-muted">Kod</span>
               <input
                 v-model="code" inputmode="numeric" maxlength="6"
-                class="mt-1 w-28 rounded border border-black/15 px-3 py-2 font-mono tracking-widest outline-none focus:border-accent"
+                class="mt-1 w-28 rounded border border-line-strong px-3 py-2 font-mono tracking-widest outline-none focus:border-accent"
               >
             </label>
             <button
-              class="rounded border border-black/15 px-4 py-2 text-sm hover:border-rose-400 hover:text-rose-700 disabled:opacity-50"
+              class="rounded border border-line-strong px-4 py-2 text-sm hover:border-danger hover:text-danger disabled:opacity-50"
               :disabled="busy || !password || code.trim().length < 6" @click="disable"
             >Isključi</button>
           </div>

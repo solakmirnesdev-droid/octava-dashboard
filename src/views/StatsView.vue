@@ -63,42 +63,42 @@ function changeSort(key) {
 <template>
   <h1 class="mb-6 text-xl font-semibold tracking-tight">Statistika</h1>
 
-  <p v-if="error" class="mb-4 rounded bg-accent/10 px-4 py-2 text-sm text-accent">{{ error }}</p>
+  <p v-if="error" class="mb-4 rounded bg-accent-soft px-4 py-2 text-sm text-accent">{{ error }}</p>
 
   <div v-if="overview" class="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-    <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40"><IconViews /> Pregleda</p>
+    <div class="rounded-lg border border-line bg-panel p-4">
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconViews /> Pregleda</p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.views) }}</p>
     </div>
-    <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40"><IconSaved /> Sačuvano</p>
+    <div class="rounded-lg border border-line bg-panel p-4">
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconSaved /> Sačuvano</p>
       <p class="mt-1 font-mono text-2xl font-semibold text-accent">{{ number(overview.favorites) }}</p>
     </div>
-    <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40"><IconRate /> Stopa čuvanja</p>
+    <div class="rounded-lg border border-line bg-panel p-4">
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconRate /> Stopa čuvanja</p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ percent(overview.saveRate) }}</p>
-      <p class="mt-0.5 text-xs text-black/40">koliko pregleda završi sačuvano</p>
+      <p class="mt-0.5 text-xs text-faint">koliko pregleda završi sačuvano</p>
     </div>
-    <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40"><IconSongs /> Pjesama</p>
+    <div class="rounded-lg border border-line bg-panel p-4">
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconSongs /> Pjesama</p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.published) }}</p>
-      <p class="mt-0.5 text-xs text-black/40">+ {{ overview.drafts }} skica</p>
+      <p class="mt-0.5 text-xs text-faint">+ {{ overview.drafts }} skica</p>
     </div>
   </div>
 
-  <div class="mb-4 flex flex-wrap gap-2 border-b border-black/10 pb-3 text-sm">
+  <div class="mb-4 flex flex-wrap gap-2 border-b border-line pb-3 text-sm">
     <button
       v-for="option in SORTS" :key="option.key"
       class="rounded px-3 py-1"
-      :class="sort === option.key ? 'bg-ink text-white' : 'text-black/55 hover:text-accent'"
+      :class="sort === option.key ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
       @click="changeSort(option.key)"
     >{{ option.label }}</button>
   </div>
 
-  <p v-if="loading" class="text-sm text-black/50">Učitavanje…</p>
+  <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
 
   <table v-else class="w-full text-sm">
-    <thead class="border-b border-black/10 text-left text-xs uppercase tracking-wide text-black/40">
+    <thead class="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
       <tr>
         <th class="pb-2">Pjesma</th>
         <th class="pb-2 w-[28%]">Pregledi</th>
@@ -107,46 +107,46 @@ function changeSort(key) {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="song in songs" :key="song._id" class="border-b border-black/5">
+      <tr v-for="song in songs" :key="song._id" class="border-b border-line-soft">
         <td class="py-2.5 pr-4">
           <span class="font-medium">{{ song.title }}</span>
-          <span class="ml-2 text-xs text-black/45">{{ song.artist?.name }}</span>
-          <span v-if="song.status === 'draft'" class="ml-2 rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-black/50">
+          <span class="ml-2 text-xs text-faint">{{ song.artist?.name }}</span>
+          <span v-if="song.status === 'draft'" class="ml-2 rounded bg-raised px-1.5 py-0.5 text-[10px] text-muted">
             skica
           </span>
         </td>
 
         <td class="py-2.5 pr-4">
           <div class="flex items-center gap-2">
-            <div class="h-2 flex-1 overflow-hidden rounded-full bg-black/[0.06]">
+            <div class="h-2 flex-1 overflow-hidden rounded-full bg-sunken">
               <div class="h-full rounded-full bg-ink/70" :style="{ width: (song.views / peakViews * 100) + '%' }" />
             </div>
-            <span class="w-14 shrink-0 text-right font-mono text-xs text-black/60">{{ number(song.views) }}</span>
+            <span class="w-14 shrink-0 text-right font-mono text-xs text-muted">{{ number(song.views) }}</span>
           </div>
         </td>
 
         <td class="py-2.5 pr-4">
           <div class="flex items-center gap-2">
-            <div class="h-2 flex-1 overflow-hidden rounded-full bg-black/[0.06]">
+            <div class="h-2 flex-1 overflow-hidden rounded-full bg-sunken">
               <div class="h-full rounded-full bg-accent" :style="{ width: (song.favorites / peakSaves * 100) + '%' }" />
             </div>
             <span class="w-14 shrink-0 text-right font-mono text-xs text-accent">{{ number(song.favorites) }}</span>
           </div>
         </td>
 
-        <td class="py-2.5 text-right font-mono text-xs text-black/50">{{ percent(song.saveRate) }}</td>
+        <td class="py-2.5 text-right font-mono text-xs text-muted">{{ percent(song.saveRate) }}</td>
       </tr>
     </tbody>
   </table>
 
   <nav v-if="meta && meta.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
     <button
-      class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
+      class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
       :disabled="page <= 1" @click="page--"
     >Prethodna</button>
-    <span class="text-black/50">{{ meta.page }} / {{ meta.pages }}</span>
+    <span class="text-muted">{{ meta.page }} / {{ meta.pages }}</span>
     <button
-      class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
+      class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
       :disabled="page >= meta.pages" @click="page++"
     >Sljedeća</button>
   </nav>

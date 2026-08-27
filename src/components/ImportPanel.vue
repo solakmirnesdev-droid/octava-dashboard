@@ -48,21 +48,21 @@ function reset() {
     <button
       v-if="!open"
       type="button"
-      class="rounded border border-black/15 px-3 py-1.5 text-sm hover:border-accent"
+      class="rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent"
       @click="open = true"
     >
       Uvezi iz „akordi iznad teksta"
     </button>
 
-    <div v-else class="rounded border border-black/15 bg-white p-4">
+    <div v-else class="rounded border border-line-strong bg-panel p-4">
       <div class="mb-2 flex items-center justify-between">
         <span class="text-sm font-medium">Uvoz pjesme</span>
-        <button type="button" class="text-xs text-black/40 hover:text-accent" @click="reset">
+        <button type="button" class="text-xs text-faint hover:text-accent" @click="reset">
           Zatvori
         </button>
       </div>
 
-      <p class="mb-3 text-xs text-black/50">
+      <p class="mb-3 text-xs text-muted">
         Zalijepi pjesmu u obliku u kojem su akordi u zasebnom redu iznad teksta.
         Konverzija poravnava akorde na početak riječi — provjeri rezultat prije
         nego ga primijeniš.
@@ -72,13 +72,13 @@ function reset() {
         v-model="raw"
         spellcheck="false"
         placeholder="Refren:&#10;Am              F&#10;prvi red teksta ovdje&#10;C          G&#10;drugi red teksta"
-        class="h-48 w-full resize-none rounded border border-black/15 p-3 font-mono text-sm outline-none focus:border-accent"
+        class="h-48 w-full resize-none rounded border border-line-strong p-3 font-mono text-sm outline-none focus:border-accent"
       />
 
       <div class="mt-2 flex items-center gap-3">
         <button
           type="button"
-          class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
+          class="rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
           :disabled="busy || !raw.trim()"
           @click="convert"
         >
@@ -87,24 +87,24 @@ function reset() {
         <span v-if="error" class="text-sm text-accent">{{ error }}</span>
       </div>
 
-      <div v-if="result" class="mt-4 border-t border-black/10 pt-4">
+      <div v-if="result" class="mt-4 border-t border-line pt-4">
         <div class="mb-2 flex flex-wrap items-center gap-3 text-xs">
-          <span class="text-black/50">
+          <span class="text-muted">
             Akordi:
-            <code v-for="c in result.chords" :key="c" class="ml-1 rounded bg-accent/10 px-1.5 py-0.5 text-accent">{{ c }}</code>
+            <code v-for="c in result.chords" :key="c" class="ml-1 rounded bg-accent-soft px-1.5 py-0.5 text-accent">{{ c }}</code>
           </span>
-          <span v-if="result.originalKey" class="text-black/50">
+          <span v-if="result.originalKey" class="text-muted">
             Tonalitet (pretpostavka): <strong class="font-mono">{{ result.originalKey }}</strong>
           </span>
         </div>
 
         <p v-for="w in result.warnings" :key="w" class="mb-2 text-xs text-accent">{{ w }}</p>
 
-        <pre class="max-h-64 overflow-auto rounded bg-black/[0.03] p-3 font-mono text-[13px] leading-relaxed">{{ result.content }}</pre>
+        <pre class="max-h-64 overflow-auto rounded bg-raised p-3 font-mono text-[13px] leading-relaxed">{{ result.content }}</pre>
 
         <button
           type="button"
-          class="mt-3 rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent"
+          class="mt-3 rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent"
           @click="apply"
         >
           Primijeni u editor

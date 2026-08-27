@@ -101,50 +101,50 @@ async function toggleActive(member) {
   <h1 class="mb-6 text-xl font-semibold tracking-tight">Nalozi</h1>
 
   <div v-if="stats && tab === 'users'" class="mb-6 grid gap-3 sm:grid-cols-3">
-    <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40">
+    <div class="rounded-lg border border-line bg-panel p-4">
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint">
         <IconUsers /> Registrovanih
       </p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ stats.total }}</p>
     </div>
-    <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40">
+    <div class="rounded-lg border border-line bg-panel p-4">
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint">
         <IconSignedIn /> Ikad se prijavilo
       </p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ stats.everSignedIn }}</p>
     </div>
-    <div class="rounded-lg border border-black/10 bg-white p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/40">
+    <div class="rounded-lg border border-line bg-panel p-4">
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint">
         <IconActive /> Aktivnih ovaj mjesec
       </p>
       <p class="mt-1 font-mono text-2xl font-semibold text-accent">{{ stats.activeThisMonth }}</p>
     </div>
   </div>
 
-  <div class="mb-4 flex flex-wrap items-center gap-2 border-b border-black/10 pb-3 text-sm">
+  <div class="mb-4 flex flex-wrap items-center gap-2 border-b border-line pb-3 text-sm">
     <button
       v-for="option in [{ k: 'users', l: 'Korisnici' }, { k: 'staff', l: 'Uredništvo' }]" :key="option.k"
       class="rounded px-3 py-1"
-      :class="tab === option.k ? 'bg-ink text-white' : 'text-black/55 hover:text-accent'"
+      :class="tab === option.k ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
       @click="tab = option.k; page = 1"
     >{{ option.l }}</button>
 
     <template v-if="tab === 'users'">
       <input
         v-model="query" type="search" placeholder="Traži po emailu ili imenu…"
-        class="ml-auto w-56 rounded border border-black/15 px-3 py-1 outline-none focus:border-accent"
+        class="ml-auto w-56 rounded border border-line-strong px-3 py-1 outline-none focus:border-accent"
       />
-      <select v-model="filter" class="rounded border border-black/15 px-2 py-1 outline-none focus:border-accent">
+      <select v-model="filter" class="rounded border border-line-strong px-2 py-1 outline-none focus:border-accent">
         <option v-for="f in FILTERS" :key="f.key" :value="f.key">{{ f.label }}</option>
       </select>
     </template>
   </div>
 
-  <p v-if="loading" class="text-sm text-black/50">Učitavanje…</p>
+  <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
 
   <!-- Readers -->
   <table v-else-if="tab === 'users'" class="w-full text-sm">
-    <thead class="border-b border-black/10 text-left text-xs uppercase tracking-wide text-black/40">
+    <thead class="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
       <tr>
         <th class="pb-2">Korisnik</th>
         <th class="pb-2">Registrovan</th>
@@ -153,24 +153,24 @@ async function toggleActive(member) {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="user in users" :key="user._id" class="border-b border-black/5">
+      <tr v-for="user in users" :key="user._id" class="border-b border-line-soft">
         <td class="py-2.5">
           <span class="font-medium">{{ user.username }}</span>
-          <span class="ml-2 text-xs text-black/45">{{ user.email }}</span>
+          <span class="ml-2 text-xs text-faint">{{ user.email }}</span>
         </td>
-        <td class="py-2.5 text-black/60">{{ new Date(user.createdAt).toLocaleDateString('bs') }}</td>
-        <td class="py-2.5" :class="when(user.lastLoginAt).dim ? 'text-black/35' : 'text-black/60'">
+        <td class="py-2.5 text-muted">{{ new Date(user.createdAt).toLocaleDateString('bs') }}</td>
+        <td class="py-2.5" :class="when(user.lastLoginAt).dim ? 'text-faint' : 'text-muted'">
           {{ when(user.lastLoginAt).text }}
         </td>
-        <td class="py-2.5 text-right font-mono text-black/60">{{ user.savedCount }}</td>
+        <td class="py-2.5 text-right font-mono text-muted">{{ user.savedCount }}</td>
       </tr>
-      <tr v-if="!users.length"><td colspan="4" class="py-6 text-center text-black/45">Nema rezultata.</td></tr>
+      <tr v-if="!users.length"><td colspan="4" class="py-6 text-center text-faint">Nema rezultata.</td></tr>
     </tbody>
   </table>
 
   <!-- Editors -->
   <table v-else class="w-full text-sm">
-    <thead class="border-b border-black/10 text-left text-xs uppercase tracking-wide text-black/40">
+    <thead class="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
       <tr>
         <th class="pb-2">Član</th>
         <th class="pb-2">Uloga</th>
@@ -180,11 +180,11 @@ async function toggleActive(member) {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="member in staff" :key="member._id" class="border-b border-black/5">
+      <tr v-for="member in staff" :key="member._id" class="border-b border-line-soft">
         <td class="py-2.5">
           <span class="font-medium">{{ member.name }}</span>
-          <span class="ml-2 text-xs text-black/45">{{ member.email }}</span>
-          <span v-if="member.isSelf" class="ml-2 rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-black/50">ti</span>
+          <span class="ml-2 text-xs text-faint">{{ member.email }}</span>
+          <span v-if="member.isSelf" class="ml-2 rounded bg-raised px-1.5 py-0.5 text-[10px] text-muted">ti</span>
         </td>
         <td class="py-2.5">
           <!-- Your own row is fixed: dropping your own rank would lock you out
@@ -192,22 +192,22 @@ async function toggleActive(member) {
           <select
             v-if="!member.isSelf"
             :value="member.role"
-            class="rounded border border-black/15 px-2 py-1 text-xs outline-none focus:border-accent"
+            class="rounded border border-line-strong px-2 py-1 text-xs outline-none focus:border-accent"
             @change="changeRole(member, $event.target.value)"
           >
             <option v-for="r in ROLES" :key="r.key" :value="r.key">{{ r.label }}</option>
           </select>
-          <span v-else class="flex items-center gap-1 text-xs text-black/50">
+          <span v-else class="flex items-center gap-1 text-xs text-muted">
             <IconShield /> {{ ROLES.find((r) => r.key === member.role)?.label }}
           </span>
         </td>
         <td class="py-2.5">
-          <span v-if="member.totpEnabled" class="flex items-center gap-1 text-xs text-green-700">
+          <span v-if="member.totpEnabled" class="flex items-center gap-1 text-xs text-ok">
             <IconLock /> uključena
           </span>
-          <span v-else class="text-xs text-black/35">nema</span>
+          <span v-else class="text-xs text-faint">nema</span>
         </td>
-        <td class="py-2.5" :class="when(member.lastLoginAt).dim ? 'text-black/35' : 'text-black/60'">
+        <td class="py-2.5" :class="when(member.lastLoginAt).dim ? 'text-faint' : 'text-muted'">
           {{ when(member.lastLoginAt).text }}
         </td>
         <td class="py-2.5 text-right">
@@ -215,8 +215,8 @@ async function toggleActive(member) {
             v-if="!member.isSelf"
             class="rounded border px-2.5 py-1 text-xs"
             :class="member.active
-              ? 'border-black/15 text-black/60 hover:border-amber-500 hover:text-amber-700'
-              : 'border-amber-400 bg-amber-50 text-amber-800'"
+              ? 'border-line-strong text-muted hover:border-warn hover:text-warn'
+              : 'border-warn bg-warn-soft text-warn'"
             @click="toggleActive(member)"
           >{{ member.active ? 'Deaktiviraj' : 'Aktiviraj' }}</button>
         </td>
@@ -225,10 +225,10 @@ async function toggleActive(member) {
   </table>
 
   <nav v-if="tab === 'users' && meta && meta.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
-    <button class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
+    <button class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
             :disabled="page <= 1" @click="page--">Prethodna</button>
-    <span class="text-black/50">{{ meta.page }} / {{ meta.pages }}</span>
-    <button class="rounded border border-black/15 px-3 py-1.5 hover:border-accent disabled:opacity-30"
+    <span class="text-muted">{{ meta.page }} / {{ meta.pages }}</span>
+    <button class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
             :disabled="page >= meta.pages" @click="page++">Sljedeća</button>
   </nav>
 </template>

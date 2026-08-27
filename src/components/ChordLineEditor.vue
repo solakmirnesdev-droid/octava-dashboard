@@ -153,7 +153,7 @@ function drop() {
 
           <span
             v-if="!line.chords.length"
-            class="pointer-events-none absolute left-0 top-0.5 text-xs text-black/15 opacity-0 transition group-hover:opacity-100"
+            class="pointer-events-none absolute left-0 top-0.5 text-xs text-dim opacity-0 transition group-hover:opacity-100"
           >klikni za akord</span>
         </div>
 
@@ -165,7 +165,7 @@ function drop() {
           class="absolute z-10 -mt-px"
           :style="{ left: Math.max(0, editing.column * charWidth - 4) + 'px', top: '0px' }"
         >
-          <div class="flex items-center gap-1 rounded border border-accent bg-white px-1 py-0.5 shadow-lg">
+          <div class="flex items-center gap-1 rounded border border-accent bg-panel px-1 py-0.5 shadow-lg">
             <input
               ref="input"
               v-model="editing.value"
@@ -178,7 +178,7 @@ function drop() {
             <button
               v-if="editing.chordIndex !== null"
               type="button"
-              class="text-xs text-black/30 hover:text-accent"
+              class="text-xs text-dim hover:text-accent"
               title="Ukloni akord"
               @mousedown.prevent="drop"
             >×</button>
@@ -187,7 +187,7 @@ function drop() {
       </div>
     </template>
 
-    <p v-if="!parsed.some((l) => l.raw.trim())" class="text-sm text-black/40">
+    <p v-if="!parsed.some((l) => l.raw.trim())" class="text-sm text-faint">
       Zalijepi ili unesi tekst pjesme, pa klikni iznad stiha da dodaš akord.
     </p>
   </div>

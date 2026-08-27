@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Octava — Dashboard</title>
+    <script>
+      // Pins an explicitly chosen theme before anything is painted. The system
+      // preference needs no script: style.css resolves it from color-scheme.
+      try {
+        var t = localStorage.getItem('octava-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

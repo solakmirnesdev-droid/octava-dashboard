@@ -92,7 +92,7 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
     <div class="mb-2 flex items-center justify-between">
       <h2 class="text-sm font-medium">Verzije ({{ arrangements.length }})</h2>
       <button
-        class="rounded border border-black/15 px-4 py-2 text-sm hover:border-accent disabled:opacity-50"
+        class="rounded border border-line-strong px-4 py-2 text-sm hover:border-accent disabled:opacity-50"
         :disabled="adding || atLimit || busy"
         @click="startAdding"
       >
@@ -100,7 +100,7 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
       </button>
     </div>
 
-    <p class="mb-3 text-sm text-black/45">
+    <p class="mb-3 text-sm text-faint">
       Obrazac iznad uređuje <strong class="font-medium">glavnu</strong> verziju. Ocjene čitalaca
       idu na pojedinu verziju, ne na pjesmu.
       <span v-if="atLimit"> Dosegnut je najveći broj verzija (6).</span>
@@ -110,27 +110,27 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
       <li
         v-for="a in arrangements" :key="a._id"
         class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded border px-4 py-3"
-        :class="a.isPrimary ? 'border-accent/40 bg-accent/[0.03]' : 'border-black/15'"
+        :class="a.isPrimary ? 'border-accent/40 bg-accent/[0.03]' : 'border-line-strong'"
       >
         <span class="font-medium">{{ a.label }}</span>
-        <span class="text-sm text-black/50">
+        <span class="text-sm text-muted">
           {{ a.originalKey }}<template v-if="a.capo"> · kapo {{ a.capo }}</template>
           · {{ labelOf(a.difficulty) }} · {{ scoreOf(a) }}
         </span>
         <span
           v-if="a.isPrimary"
-          class="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent"
+          class="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent"
         >glavna</span>
 
         <span class="ml-auto flex gap-2">
           <button
             v-if="!a.isPrimary"
-            class="rounded border border-black/15 px-2.5 py-1 text-sm hover:border-accent disabled:opacity-50"
+            class="rounded border border-line-strong px-2.5 py-1 text-sm hover:border-accent disabled:opacity-50"
             :disabled="busy" @click="makePrimary(a)"
           ><span class="flex items-center gap-1.5"><IconStar /> Postavi kao glavnu</span></button>
 
           <button
-            class="rounded border border-black/15 px-2.5 py-1 text-sm hover:border-accent disabled:opacity-50"
+            class="rounded border border-line-strong px-2.5 py-1 text-sm hover:border-accent disabled:opacity-50"
             :disabled="busy || arrangements.length <= 1"
             :title="arrangements.length <= 1 ? 'Posljednja verzija se ne može obrisati.' : ''"
             @click="remove(a)"
@@ -139,18 +139,18 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
       </li>
     </ul>
 
-    <div v-if="adding" class="mt-3 rounded border border-black/15 px-4 py-3">
+    <div v-if="adding" class="mt-3 rounded border border-line-strong px-4 py-3">
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <label class="block">
           <span class="text-sm font-medium">Naziv verzije</span>
           <input
             v-model="draft.label" placeholder="npr. Lakša verzija"
-            class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent"
+            class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
           >
         </label>
         <label class="block">
           <span class="text-sm font-medium">Tonalitet</span>
-          <select v-model="draft.originalKey" class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent">
+          <select v-model="draft.originalKey" class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent">
             <option v-for="key in KEYS" :key="key">{{ key }}</option>
           </select>
         </label>
@@ -158,12 +158,12 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
           <span class="text-sm font-medium">Kapodaster</span>
           <input
             v-model.number="draft.capo" type="number" min="0" max="12"
-            class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent"
+            class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
           >
         </label>
         <label class="block">
           <span class="text-sm font-medium">Težina</span>
-          <select v-model="draft.difficulty" class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent">
+          <select v-model="draft.difficulty" class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent">
             <option v-for="d in DIFFICULTIES" :key="d.value" :value="d.value">{{ d.label }}</option>
           </select>
         </label>
@@ -173,17 +173,17 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
         <span class="text-sm font-medium">Tekst sa akordima</span>
         <textarea
           v-model="draft.content" rows="10"
-          class="mt-1 w-full rounded border border-black/15 px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+          class="mt-1 w-full rounded border border-line-strong px-3 py-2 font-mono text-sm outline-none focus:border-accent"
           placeholder="[Am]tekst sa akordima u uglastim zagradama"
         />
       </label>
 
       <div class="mt-3 flex justify-end gap-2">
-        <button class="rounded px-4 py-2 text-sm text-black/60 hover:text-accent" @click="adding = false">
+        <button class="rounded px-4 py-2 text-sm text-muted hover:text-accent" @click="adding = false">
           Odustani
         </button>
         <button
-          class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
+          class="rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
           :disabled="busy" @click="add"
         >{{ busy ? 'Spašavanje…' : 'Dodaj verziju' }}</button>
       </div>

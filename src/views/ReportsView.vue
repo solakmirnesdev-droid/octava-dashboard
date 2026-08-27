@@ -81,7 +81,7 @@ onMounted(load);
   <section>
     <header class="mb-5 flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold tracking-tight">Prijave grešaka</h1>
-      <span v-if="open" class="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-white">
+      <span v-if="open" class="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-on-accent">
         {{ open }} otvorenih
       </span>
 
@@ -90,48 +90,48 @@ onMounted(load);
           v-for="s in STATUSES" :key="s.value"
           class="rounded border px-2.5 py-1"
           :class="status === s.value
-            ? 'border-accent bg-accent text-white'
-            : 'border-black/15 bg-white hover:border-accent hover:text-accent'"
+            ? 'border-accent bg-accent text-on-accent'
+            : 'border-line-strong bg-panel hover:border-accent hover:text-accent'"
           @click="setStatus(s.value)"
         >{{ s.label }}</button>
       </div>
     </header>
 
-    <p class="mb-3 text-sm text-black/45">{{ total }} prijava</p>
+    <p class="mb-3 text-sm text-faint">{{ total }} prijava</p>
 
-    <p v-if="loading" class="text-sm text-black/45">Učitavanje…</p>
+    <p v-if="loading" class="text-sm text-faint">Učitavanje…</p>
 
-    <p v-else-if="!items.length" class="rounded border border-black/10 bg-white px-4 py-8 text-center text-sm text-black/45">
+    <p v-else-if="!items.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
       Nema prijava u ovoj kategoriji.
     </p>
 
     <ul v-else class="space-y-2">
-      <li v-for="r in items" :key="r._id" class="rounded border border-black/10 bg-white px-4 py-3">
+      <li v-for="r in items" :key="r._id" class="rounded border border-line bg-panel px-4 py-3">
         <div class="flex flex-wrap items-baseline gap-x-2 text-sm">
-          <span class="rounded bg-black/5 px-1.5 py-0.5 text-[11px] font-medium">
+          <span class="rounded bg-raised px-1.5 py-0.5 text-[11px] font-medium">
             {{ KINDS[r.kind] || r.kind }}
           </span>
           <a
             v-if="r.song" :href="`${appUrl}/pjesma/${r.song.slug}`" target="_blank" rel="noopener"
             class="inline-flex items-center gap-1 font-medium hover:text-accent"
           >{{ r.song.title }} <IconOpen class="text-xs" /></a>
-          <span class="text-black/40">{{ r.user?.username }}</span>
-          <span class="text-xs text-black/35">· {{ when(r.createdAt) }}</span>
+          <span class="text-faint">{{ r.user?.username }}</span>
+          <span class="text-xs text-faint">· {{ when(r.createdAt) }}</span>
         </div>
 
-        <p v-if="r.note" class="mt-2 whitespace-pre-wrap text-sm text-black/75">{{ r.note }}</p>
+        <p v-if="r.note" class="mt-2 whitespace-pre-wrap text-sm text-ink">{{ r.note }}</p>
 
-        <p v-if="r.status !== 'open'" class="mt-2 text-xs text-black/45">
+        <p v-if="r.status !== 'open'" class="mt-2 text-xs text-faint">
           {{ r.status === 'resolved' ? 'Riješio' : 'Odbio' }} {{ r.resolvedBy?.name || '—' }}
         </p>
 
         <div v-if="r.status === 'open'" class="mt-3 flex gap-2">
           <button
-            class="flex items-center gap-1.5 rounded border border-black/15 px-2.5 py-1 text-sm hover:border-emerald-500 hover:text-emerald-700"
+            class="flex items-center gap-1.5 rounded border border-line-strong px-2.5 py-1 text-sm hover:border-ok hover:text-ok"
             @click="close(r, 'resolved')"
           ><IconDone /> Riješeno</button>
           <button
-            class="flex items-center gap-1.5 rounded border border-black/15 px-2.5 py-1 text-sm hover:border-black/40 hover:text-black/70"
+            class="flex items-center gap-1.5 rounded border border-line-strong px-2.5 py-1 text-sm hover:border-line-strong hover:text-body"
             @click="close(r, 'rejected')"
           ><IconReject /> Nije greška</button>
         </div>
@@ -139,10 +139,10 @@ onMounted(load);
     </ul>
 
     <nav v-if="pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
-      <button class="rounded border border-black/15 px-3 py-1.5 disabled:opacity-35"
+      <button class="rounded border border-line-strong px-3 py-1.5 disabled:opacity-35"
               :disabled="page <= 1" @click="page--; load()">Prethodna</button>
-      <span class="text-black/45">{{ page }} / {{ pages }}</span>
-      <button class="rounded border border-black/15 px-3 py-1.5 disabled:opacity-35"
+      <span class="text-faint">{{ page }} / {{ pages }}</span>
+      <button class="rounded border border-line-strong px-3 py-1.5 disabled:opacity-35"
               :disabled="page >= pages" @click="page++; load()">Sljedeća</button>
     </nav>
   </section>

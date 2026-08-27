@@ -147,13 +147,13 @@ async function save(status) {
     </h1>
     <div class="flex gap-2">
       <button
-        class="rounded border border-black/15 px-4 py-2 text-sm hover:border-accent"
+        class="rounded border border-line-strong px-4 py-2 text-sm hover:border-accent"
         :disabled="saving" @click="save('draft')"
       >
         <span class="flex items-center gap-1.5"><IconDraft /> Sačuvaj skicu</span>
       </button>
       <button
-        class="rounded bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
+        class="rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
         :disabled="saving" @click="save('published')"
       >
         <span class="flex items-center gap-1.5">
@@ -163,37 +163,37 @@ async function save(status) {
     </div>
   </div>
 
-  <p v-if="error" class="mb-4 rounded bg-accent/10 px-4 py-2 text-sm text-accent">{{ error }}</p>
+  <p v-if="error" class="mb-4 rounded bg-accent-soft px-4 py-2 text-sm text-accent">{{ error }}</p>
 
   <ImportPanel @imported="applyImport" />
 
   <div class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
     <label class="block">
       <span class="text-sm font-medium">Naslov</span>
-      <input v-model="form.title" class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent" />
+      <input v-model="form.title" class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent" />
     </label>
     <label class="block">
       <span class="text-sm font-medium">Izvođač</span>
-      <input v-model="form.artist" class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent" />
+      <input v-model="form.artist" class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent" />
     </label>
     <label class="block">
       <span class="text-sm font-medium">Tonalitet</span>
-      <select v-model="form.originalKey" class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent">
+      <select v-model="form.originalKey" class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent">
         <option v-for="key in KEYS" :key="key">{{ key }}</option>
       </select>
     </label>
     <label class="block">
       <span class="text-sm font-medium">Kapodaster</span>
       <input v-model.number="form.capo" type="number" min="0" max="12"
-             class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent" />
+             class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent" />
     </label>
 
     <label class="block lg:col-span-2">
-      <span class="text-sm font-medium">YouTube <span class="font-normal text-black/40">(nije obavezno)</span></span>
+      <span class="text-sm font-medium">YouTube <span class="font-normal text-faint">(nije obavezno)</span></span>
       <input
         v-model="form.youtube"
         placeholder="Zalijepi link — youtube.com/watch?v=… ili youtu.be/…"
-        class="mt-1 w-full rounded border border-black/15 px-3 py-2 outline-none focus:border-accent"
+        class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
       >
     </label>
   </div>
@@ -223,14 +223,14 @@ async function save(status) {
         type="button"
         class="rounded-full border px-3 py-1 text-xs transition"
         :class="form.genres.includes(genre.slug)
-          ? 'border-accent bg-accent/10 text-accent'
-          : 'border-black/15 text-black/60 hover:border-accent'"
+          ? 'border-accent bg-accent-soft text-accent'
+          : 'border-line-strong text-muted hover:border-accent'"
         @click="toggleGenre(genre.slug)"
       >
         {{ genre.name }}
       </button>
     </div>
-    <p class="mt-1.5 text-xs text-black/40">
+    <p class="mt-1.5 text-xs text-faint">
       Pjesma može biti u više rubrika — npr. Domaća i Zabavna istovremeno.
     </p>
   </div>
@@ -240,15 +240,15 @@ async function save(status) {
       <div class="mb-2 flex items-center justify-between">
         <span class="text-sm font-medium">Tekst i akordi</span>
 
-        <div class="flex items-center gap-1 rounded border border-black/15 p-0.5 text-xs">
+        <div class="flex items-center gap-1 rounded border border-line-strong p-0.5 text-xs">
           <button
             type="button" class="rounded px-2 py-1"
-            :class="mode === 'visual' ? 'bg-ink text-white' : 'text-black/50 hover:text-accent'"
+            :class="mode === 'visual' ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
             @click="mode = 'visual'"
           >Vizuelno</button>
           <button
             type="button" class="rounded px-2 py-1"
-            :class="mode === 'raw' ? 'bg-ink text-white' : 'text-black/50 hover:text-accent'"
+            :class="mode === 'raw' ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
             @click="mode = 'raw'"
           >Tekst</button>
         </div>
@@ -256,7 +256,7 @@ async function save(status) {
 
       <div
         v-if="mode === 'visual'"
-        class="h-[28rem] overflow-auto rounded border border-black/15 bg-white p-4"
+        class="h-[28rem] overflow-auto rounded border border-line-strong bg-panel p-4"
       >
         <ChordLineEditor v-model:content="form.content" />
       </div>
@@ -267,12 +267,12 @@ async function save(status) {
         v-model="form.content"
         spellcheck="false"
         placeholder="[Am]prvi stih ide [F]ovdje&#10;[C]drugi stih ide [G]ovdje&#10;&#10;[Refren]&#10;[Am]tekst refrena"
-        class="h-[28rem] w-full resize-none rounded border border-black/15 bg-white p-4 font-mono text-[15px] leading-relaxed outline-none focus:border-accent"
+        class="h-[28rem] w-full resize-none rounded border border-line-strong bg-panel p-4 font-mono text-[15px] leading-relaxed outline-none focus:border-accent"
         @keydown.meta.k.prevent="insertChordMarker"
         @keydown.ctrl.k.prevent="insertChordMarker"
       />
 
-      <p class="mt-2 text-xs text-black/40">
+      <p class="mt-2 text-xs text-faint">
         <template v-if="mode === 'visual'">
           Klikni iznad stiha na mjesto gdje se akord mijenja. Klik na postojeći
           akord ga mijenja, prazno polje ga briše.
@@ -290,11 +290,11 @@ async function save(status) {
         <span v-if="usedChords.length" class="flex flex-wrap gap-1">
           <code
             v-for="chord in usedChords" :key="chord"
-            class="rounded bg-accent/10 px-1.5 py-0.5 text-xs text-accent"
+            class="rounded bg-accent-soft px-1.5 py-0.5 text-xs text-accent"
           >{{ chord }}</code>
         </span>
       </div>
-      <div class="h-[28rem] overflow-auto rounded border border-black/10 bg-white p-4">
+      <div class="h-[28rem] overflow-auto rounded border border-line bg-panel p-4">
         <ChordSheet :content="form.content" :original-key="form.originalKey" />
       </div>
     </div>
