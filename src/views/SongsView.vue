@@ -48,6 +48,19 @@ function toggleAll() {
 
 const page = ref(1);
 const status = ref('');
+const tag = ref('');
+
+/**
+ * The marks an automated import leaves behind.
+ *
+ * AI-NOTE: without a way to filter on these, the marks are invisible and nobody
+ * ever works through them — which is the same as not having written them.
+ */
+const TAGS = [
+  { key: 'bez-akorda', label: 'Bez akorda' },
+  { key: 'neprovjereno', label: 'Neprovjereno' },
+  { key: 'uvoz', label: 'Iz uvoza' }
+];
 
 const FILTERS = [
   { key: '', label: 'Sve' },
@@ -59,7 +72,11 @@ async function load() {
   loading.value = true;
   try {
     const { data } = await client.get('/songs', {
-      params: { page: page.value, limit: 25, status: status.value || undefined }
+      params: {
+        page: page.value, limit: 25,
+        status: status.value || undefined,
+        tag: tag.value || undefined
+      }
     });
     songs.value = data.songs || [];
     meta.value = data.meta;
@@ -70,7 +87,7 @@ async function load() {
   }
 }
 
-watch([page, status], () => {
+watch([page, status, tag], () => {
   selected.value = new Set();
   load();
 });
@@ -92,6 +109,11 @@ async function afterBulk() {
 
 function setFilter(key) {
   status.value = key;
+  page.value = 1;
+}
+
+function setTag(key) {
+  tag.value = tag.value === key ? '' : key;
   page.value = 1;
 }
 
@@ -156,6 +178,17 @@ async function toggleStatus(song) {
       :class="status === filter.key ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
       @click="setFilter(filter.key)"
     >{{ filter.label }}</button>
+
+    <span class="mx-1 self-center h-5 w-px bg-sunken" aria-hidden="true" />
+
+    <button
+      v-for="t in TAGS" :key="t.key"
+      class="rounded border px-2.5 py-1 text-xs transition"
+      :class="tag === t.key
+        ? 'border-accent bg-accent-soft text-accent'
+        : 'border-line-strong text-muted hover:border-accent hover:text-accent'"
+      @click="setTag(t.key)"
+    >{{ t.label }}</button>
   </div>
 
   <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
