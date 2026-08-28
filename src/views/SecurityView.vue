@@ -4,6 +4,7 @@ import AppModal from '../components/AppModal.vue';
 import client from '../api/client';
 import { useAuthStore } from '../stores/auth';
 import { useToasts } from '../composables/useToasts';
+import IconMail from '~icons/material-symbols/mail-outline-rounded';
 import IconShield from '~icons/material-symbols/shield-outline-rounded';
 import IconCheck from '~icons/material-symbols/check-circle-outline-rounded';
 import IconCopy from '~icons/material-symbols/content-copy-outline-rounded';
@@ -31,6 +32,73 @@ const backupCodes = ref([]);
 const acknowledged = ref(false);
 
 const enabled = computed(() => Boolean(auth.user?.totpEnabled));
+
+// ------------------------------------------------------------ email codes ---
+
+/**
+ * Email as a second factor, beside the authenticator rather than instead of it.
+ *
+ * AI-DECISION: kept as its own card with its own state. Folding both into one
+ * control would make "second factor" a single switch with two meanings, and the
+ * two are genuinely independent — an account can run either, both, or neither,
+ * and the login offers whichever are on.
+ */
+const mailOn = computed(() => Boolean(auth.user?.emailOtpEnabled));
+const mailStage = ref('idle');
+const mailBusy = ref(false);
+const mailCode = ref('');
+const mailPassword = ref('');
+const mailDisabling = ref(false);
+
+async function sendMailCode() {
+  mailBusy.value = true;
+  try {
+    const { data } = await client.post('/auth/staff/2fa/email/setup', { password: mailPassword.value });
+    mailStage.value = 'sent';
+    toasts.success(`Kod poslan na ${data.to}`);
+  } catch (err) {
+    toasts.error(err.response?.data?.message || 'Slanje nije uspjelo.');
+  } finally {
+    mailBusy.value = false;
+  }
+}
+
+async function confirmMail() {
+  mailBusy.value = true;
+  try {
+    const { data } = await client.post('/auth/staff/2fa/email/enable', { code: mailCode.value.trim() });
+    // Only minted when the account had none; an authenticator set up earlier
+    // already handed them over and they are not shown twice.
+    if (data.backupCodes?.length) {
+      backupCodes.value = data.backupCodes;
+      acknowledged.value = false;
+      stage.value = 'codes';
+    }
+    await auth.fetchMe();
+    mailStage.value = 'idle';
+    mailCode.value = '';
+    mailPassword.value = '';
+    toasts.success('Potvrda mailom je uključena.');
+  } catch (err) {
+    toasts.error(err.response?.data?.message || 'Kod nije prihvaćen.');
+  } finally {
+    mailBusy.value = false;
+  }
+}
+
+async function disableMail() {
+  mailBusy.value = true;
+  try {
+    await client.post('/auth/staff/2fa/email/disable', { password: mailPassword.value });
+    await auth.fetchMe();
+    mailPassword.value = '';
+    toasts.success('Potvrda mailom je isključena.');
+  } catch (err) {
+    toasts.error(err.response?.data?.message || 'Isključivanje nije uspjelo.');
+  } finally {
+    mailBusy.value = false;
+  }
+}
 
 function reset() {
   stage.value = 'idle';
@@ -293,6 +361,91 @@ function finishCodes() {
       </template>
     </div>
   
+    <!-- Email codes ------------------------------------------------------ -->
+    <div class="mt-4 rounded border border-line bg-panel px-5 py-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <IconMail class="text-xl" :class="mailOn ? 'text-ok' : 'text-dim'" />
+        <div>
+          <p class="text-sm font-medium">Potvrda mailom</p>
+          <p class="text-xs text-muted">
+            {{ mailOn
+              ? `Uključena — kod stiže na ${auth.user?.email}.`
+              : 'Kod na email umjesto aplikacije za kodove.' }}
+          </p>
+        </div>
+        <span
+          class="ml-auto rounded-full px-2 py-0.5 text-xs font-medium"
+          :class="mailOn ? 'bg-ok-soft text-ok' : 'bg-raised text-muted'"
+        >{{ mailOn ? 'aktivna' : 'neaktivna' }}</span>
+      </div>
+
+      <template v-if="!mailOn && mailStage === 'idle'">
+        <p class="mt-4 text-sm text-body">
+          Poslat ćemo kod na tvoju adresu da provjerimo da stiže. Bez toga bi
+          uključivanje moglo zaključati nalog.
+        </p>
+        <div class="mt-4 flex flex-wrap items-end gap-3">
+          <label class="block">
+            <span class="text-xs text-faint">Lozinka</span>
+            <input
+              v-model="mailPassword" type="password" autocomplete="current-password"
+              class="mt-1 w-56 rounded border border-line-strong px-3 py-2 text-sm outline-none focus:border-accent"
+            >
+          </label>
+          <button
+            class="rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
+            :disabled="mailBusy || !mailPassword" @click="sendMailCode"
+          >{{ mailBusy ? 'Šaljem…' : 'Pošalji kod' }}</button>
+        </div>
+      </template>
+
+      <template v-else-if="!mailOn && mailStage === 'sent'">
+        <p class="mt-4 text-sm text-body">
+          Upiši šestocifreni kod iz maila. Vrijedi 10 minuta.
+        </p>
+        <div class="mt-4 flex flex-wrap items-end gap-3">
+          <input
+            v-model="mailCode" inputmode="numeric" maxlength="6" placeholder="000000"
+            class="w-32 rounded border border-line-strong px-3 py-2 text-center font-mono text-lg outline-none focus:border-accent"
+            @keyup.enter="confirmMail"
+          >
+          <button
+            class="rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent disabled:opacity-50"
+            :disabled="mailBusy || mailCode.trim().length < 6" @click="confirmMail"
+          >Uključi</button>
+          <button class="px-2 py-2 text-sm text-muted hover:text-ink" @click="mailStage = 'idle'">Odustani</button>
+        </div>
+      </template>
+
+      <template v-else-if="mailOn">
+        <div class="mt-4 flex flex-wrap items-end gap-3">
+          <label class="block">
+            <span class="text-xs text-faint">Lozinka</span>
+            <input
+              v-model="mailPassword" type="password" autocomplete="current-password"
+              class="mt-1 w-56 rounded border border-line-strong px-3 py-2 text-sm outline-none focus:border-accent"
+            >
+          </label>
+          <button
+            class="rounded border border-line-strong px-4 py-2 text-sm hover:border-danger hover:text-danger disabled:opacity-50"
+            :disabled="mailBusy || !mailPassword" @click="mailDisabling = true"
+          >Isključi</button>
+        </div>
+      </template>
+    </div>
+
+    <AppModal
+      v-model="mailDisabling"
+      title="Isključiti potvrdu mailom?"
+      :description="enabled
+        ? 'Aplikacija za kodove ostaje uključena.'
+        : 'Nalog ostaje zaštićen samo lozinkom.'"
+      confirm-label="Isključi"
+      tone="danger"
+      :busy="mailBusy"
+      @confirm="() => { mailDisabling = false; disableMail(); }"
+    />
+
     <AppModal
       v-model="disabling"
       title="Isključiti dvostruku potvrdu?"

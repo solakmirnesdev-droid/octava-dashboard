@@ -8,6 +8,14 @@ const props = defineProps({
   // Passed so transposition spells the result to match the destination key
   // instead of falling back to sharps for everything.
   originalKey: { type: String, default: '' }
+  /*
+   * AI-DECISION: deliberately no `capo` prop, though the site's ChordSheet has
+   * one. There it drops the shapes so a capoed guitar sounds the stored chords.
+   * Here the sheet is a live preview of what the editor is typing, and its job
+   * is to show what is actually stored — shifting it would show them something
+   * other than what they wrote, which is the one thing an editing surface must
+   * never do. Do not add the prop for symmetry.
+   */
 });
 
 const lines = computed(() =>

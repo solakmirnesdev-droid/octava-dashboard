@@ -59,6 +59,11 @@ const tag = ref('');
 const TAGS = [
   { key: 'bez-akorda', label: 'Bez akorda' },
   { key: 'neprovjereno', label: 'Neprovjereno' },
+  // Written by the seed on eight traditional songs whose words were set down
+  // from the oral tradition rather than copied from a source. Being out of
+  // copyright is not the same as being correct, and this tool is the only place
+  // anybody can read them against what they know.
+  { key: 'treba-provjeru', label: 'Treba provjeru' },
   { key: 'uvoz', label: 'Iz uvoza' }
 ];
 

@@ -196,6 +196,7 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
             v-model.number="draft.capo" type="number" min="0" max="12"
             class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
           >
+          <p class="mt-1.5 text-xs text-faint">Prijedlog — akordi u tekstu su ono što zvuči.</p>
         </label>
         <label class="block">
           <span class="text-sm font-medium">Težina</span>

@@ -26,7 +26,7 @@ const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H',
               'Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Hm'];
 
 const form = ref({
-  title: '', artist: '', originalKey: 'Am', capo: 0,
+  title: '', artist: '', originalKey: 'Am', capo: 0, year: null,
   difficulty: 'medium', tags: [], genres: [], content: '', status: 'draft'
 });
 const genres = ref([]);
@@ -185,6 +185,21 @@ async function save(status) {
     <label class="block">
       <span class="text-sm font-medium">Kapodaster</span>
       <input v-model.number="form.capo" type="number" min="0" max="12"
+             class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent" />
+      <!-- The site reads this as a suggestion, never as an offset already
+           applied to the symbols. Saying so here is what keeps the two ends
+           agreeing: an editor who thinks the box shifts the chords will type
+           shapes, and every key label on that song becomes wrong. -->
+      <p class="mt-1.5 text-xs text-faint">Prijedlog za sviranje. Akordi u tekstu su ono što <em class="not-italic font-medium">zvuči</em> — kapodaster ih ne pomjera.</p>
+    </label>
+
+    <label class="block">
+      <span class="text-sm font-medium">Godina <span class="font-normal text-faint">(nije obavezno)</span></span>
+      <!-- The field has been on the schema and in the public payload since the
+           beginning, but nothing ever sent one, so every song showed a blank
+           where a year belongs. The API bounds it; this only has to offer it. -->
+      <input v-model.number="form.year" type="number" min="1900" :max="new Date().getFullYear() + 1"
+             placeholder="npr. 1974"
              class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent" />
     </label>
 

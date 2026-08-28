@@ -2,8 +2,12 @@
  * Mapping between a stored ChordPro line and the plain text a worker sees.
  *
  * The two indexes are not the same. In "[Am]tekst [F]ovdje" the letter "o" is
- * at index 6 on screen but index 14 in the source, because the bracket tokens
- * occupy space in one and not the other. Every click-to-place operation has to
+ * at index 6 on screen but index 13 in the source, because the bracket tokens
+ * occupy space in one and not the other.
+ *
+ * AI-NOTE: that 13 was documented as 14 until a test pinned it down. Count it
+ * out rather than trusting the prose: [Am] is 0-3, tekst 4-8, the space 9,
+ * [F] 10-12, so "o" lands on 13. Every click-to-place operation has to
  * translate between them or chords land in the wrong place.
  */
 

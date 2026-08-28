@@ -45,6 +45,34 @@ const artists = ref([]);
 const genres = ref([]);
 const loading = ref(true);
 const filter = ref('');
+const countryFilter = ref('');
+const trashMode = ref(false);
+const trashed = ref([]);
+
+async function loadTrash() {
+  try {
+    const { data } = await client.get('/artists/trash');
+    trashed.value = data.artists || [];
+  } catch (err) {
+    toasts.error(err.response?.data?.message || 'Učitavanje korpe nije uspjelo.');
+  }
+}
+
+async function toggleTrash() {
+  trashMode.value = !trashMode.value;
+  if (trashMode.value) await loadTrash();
+}
+
+async function restoreArtist(a) {
+  try {
+    await client.post(`/artists/${a._id}/restore`);
+    trashed.value = trashed.value.filter((x) => x._id !== a._id);
+    toasts.success(`Vraćen: ${a.name}`);
+    await load();
+  } catch (err) {
+    toasts.error(err.response?.data?.message || 'Vraćanje nije uspjelo.');
+  }
+}
 
 /**
  * Narrows the grid to artists with no photograph.
@@ -69,6 +97,7 @@ const visible = computed(() => {
   const q = filter.value.trim().toLowerCase();
   return artists.value.filter(
     (a) => a.name.toLowerCase().includes(q) && (!missingImage.value || !a.hasImage)
+         && (!countryFilter.value || a.country === countryFilter.value)
   );
 });
 
@@ -111,7 +140,7 @@ async function load() {
 
 function startCreate() {
   editing.value = {};
-  form.value = { name: '', country: '', bio: '', genres: [] };
+  form.value = { name: '', country: '', origin: '', website: '', activeFrom: '', activeTo: '', bio: '', genres: [] };
 }
 
 function startEdit(a) {
@@ -119,6 +148,10 @@ function startEdit(a) {
   form.value = {
     name: a.name,
     country: a.country || '',
+    origin: a.origin || '',
+    website: a.website || '',
+    activeFrom: a.activeFrom || '',
+    activeTo: a.activeTo || '',
     bio: a.bio || '',
     genres: (a.genres || []).map((g) => g.slug || g)
   };
@@ -131,6 +164,12 @@ async function save() {
     const body = {
       name: form.value.name.trim(),
       country: form.value.country || null,
+      origin: form.value.origin,
+      website: form.value.website,
+      // '' clears the year, which is what the API expects; absent would leave
+      // whatever the MusicBrainz pass wrote in place.
+      activeFrom: form.value.activeFrom,
+      activeTo: form.value.activeTo,
       bio: form.value.bio,
       genres: form.value.genres
     };
@@ -214,6 +253,21 @@ async function removeImage() {
   }
 }
 
+/** Only the countries the loaded artists actually have. */
+const presentCountries = computed(() => {
+  const counts = new Map();
+  for (const a of artists.value) {
+    if (a.country) counts.set(a.country, (counts.get(a.country) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([code, count]) => ({
+      code,
+      count,
+      name: COUNTRIES.find((c) => c.code === code)?.name || code
+    }))
+    .sort((x, y) => y.count - x.count);
+});
+
 const withoutImage = computed(() => artists.value.filter((a) => !a.hasImage).length);
 
 const imageUrl = (a) => `${apiBase}/artists/${a._id}/image?v=${imageVersion.value}`;
@@ -239,6 +293,27 @@ onMounted(load);
         bez slike
         <span class="ml-1 font-mono">{{ withoutImage }}</span>
       </button>
+
+      <button
+        type="button"
+        class="rounded border px-2.5 py-1 text-xs transition"
+        :class="trashMode
+          ? 'border-accent bg-accent-soft text-accent'
+          : 'border-line-strong text-muted hover:border-accent hover:text-accent'"
+        title="Obrisani izvođači"
+        @click="toggleTrash"
+      >korpa</button>
+
+      <select
+        v-model="countryFilter"
+        class="rounded border border-line-strong bg-panel px-2 py-1 text-xs outline-none focus:border-accent"
+        aria-label="Filtriraj po zemlji"
+      >
+        <option value="">sve zemlje</option>
+        <option v-for="c in presentCountries" :key="c.code" :value="c.code">
+          {{ c.name }} ({{ c.count }})
+        </option>
+      </select>
 
       <input
         v-model="filter" placeholder="Filtriraj po imenu"
@@ -281,7 +356,43 @@ onMounted(load);
           </select>
         </label>
 
-        <div class="lg:col-span-2">
+        <label class="block">
+          <span class="text-sm font-medium">Porijeklo <span class="font-normal text-faint">(grad)</span></span>
+          <input
+            v-model="form.origin" maxlength="80" placeholder="npr. Sarajevo"
+            class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
+          >
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium">Sajt <span class="font-normal text-faint">(nije obavezno)</span></span>
+          <input
+            v-model="form.website" maxlength="200" placeholder="https://"
+            class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
+          >
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium">Djeluje od <span class="font-normal text-faint">(godina)</span></span>
+          <input
+            v-model="form.activeFrom" type="number" min="1800" max="2100" placeholder="npr. 1974"
+            class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
+          >
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium">do <span class="font-normal text-faint">(prazno = i dalje aktivan)</span></span>
+          <input
+            v-model="form.activeTo" type="number" min="1800" max="2100" placeholder="npr. 1989"
+            class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
+          >
+        </label>
+
+        <!-- Everything above is shown on the artist's public page and the API
+             has always accepted it; this form simply never sent any of it, so
+             the only values that existed were whatever the MusicBrainz pass
+             happened to write. -->
+        <div class="lg:col-span-4">
           <span class="text-sm font-medium">Rubrike</span>
           <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
             <label v-for="g in genres" :key="g.slug" class="flex items-center gap-1.5 text-sm">
@@ -341,6 +452,29 @@ onMounted(load);
 
     <p v-if="loading" class="text-sm text-faint">Učitavanje…</p>
 
+    <!-- The bin, which is the whole reason a soft delete is safe to do. Without
+         somewhere to see and undo it, a hidden row is worse than a destroyed
+         one: it looks like data loss and is not. -->
+    <template v-else-if="trashMode">
+      <p v-if="!trashed.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
+        Korpa je prazna.
+      </p>
+      <ul v-else class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <li
+          v-for="a in trashed" :key="a._id"
+          class="flex items-center gap-3 rounded border border-line bg-panel px-3 py-2"
+        >
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium">{{ a.name }}</p>
+            <p class="text-xs text-faint">
+              obrisao {{ a.deletedBy?.name || '—' }}
+            </p>
+          </div>
+          <button class="text-xs text-faint hover:text-ok" @click="restoreArtist(a)">Vrati</button>
+        </li>
+      </ul>
+    </template>
+
     <ul v-else class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       <li
         v-for="a in visible" :key="a._id"
@@ -362,7 +496,13 @@ onMounted(load);
           <p class="truncate text-sm font-medium">
             <span v-if="a.flag" class="mr-1">{{ a.flag }}</span>{{ a.name }}
           </p>
-          <p class="text-xs text-faint">{{ a.songCount }} pjesama</p>
+          <p class="flex items-center gap-2 text-xs text-faint">
+            <span>{{ a.songCount }} pjesama</span>
+            <!-- Guarded on ratingCount, not on rating: an artist nobody has
+                 rated scores 0, and printing "0.0" reads as a bad review
+                 rather than as no reviews. -->
+            <span v-if="a.ratingCount" class="font-mono">★ {{ a.rating.toFixed(1) }} ({{ a.ratingCount }})</span>
+          </p>
         </div>
 
         <button class="text-xs text-faint hover:text-accent" @click="startEdit(a)">Uredi</button>
@@ -377,7 +517,7 @@ onMounted(load);
     <AppModal
       :model-value="Boolean(removingArtist)"
       title="Obrisati izvođača?"
-      :description="removingArtist ? `„${removingArtist.name}“ se briše trajno. Ovo ne ide u korpu.` : ''"
+      :description="removingArtist ? `„${removingArtist.name}“ ide u korpu i nestaje sa sajta. Može se vratiti.` : ''"
       confirm-label="Obriši"
       tone="danger"
       @update:model-value="(open) => { if (!open) removingArtist = null; }"
