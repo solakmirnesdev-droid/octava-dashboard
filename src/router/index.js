@@ -31,6 +31,24 @@ const routes = [
         component: () => import('../views/NotificationsView.vue')
       },
       {
+        // Worker: acting on a request is catalogue work, not administration.
+        path: 'zahtjevi',
+        name: 'requests',
+        component: () => import('../views/RequestsView.vue'),
+        meta: { minimumRole: 'worker' }
+      },
+      {
+        /*
+         * Worker, not admin: recording a print is ordinary catalogue work, the
+         * same kind of job as typing in the chords. Only deleting one is gated
+         * higher, and the endpoint enforces that itself.
+         */
+        path: 'otisci',
+        name: 'fingerprints',
+        component: () => import('../views/FingerprintsView.vue'),
+        meta: { minimumRole: 'worker' }
+      },
+      {
         // Restoring is an admin act because deleting is, and a worker who could
         // undo a deletion could also undo an admin's decision to make it.
         path: 'trash',

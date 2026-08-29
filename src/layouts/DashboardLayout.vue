@@ -12,6 +12,8 @@ import IconAccounts from '~icons/material-symbols/manage-accounts-rounded';
 import IconBell from '~icons/material-symbols/notifications-outline-rounded';
 import IconShield from '~icons/material-symbols/shield-outline-rounded';
 import IconBug from '~icons/material-symbols/bug-report-outline-rounded';
+import IconRequest from '~icons/material-symbols/playlist-add-rounded';
+import IconPrint from '~icons/material-symbols/graphic-eq-rounded';
 import IconTrash from '~icons/material-symbols/delete-outline-rounded';
 import IconHistory from '~icons/material-symbols/history-rounded';
 import { onMounted, onBeforeUnmount } from 'vue';
@@ -65,7 +67,23 @@ async function signOut() {
           >
             <IconShield /> Moderacija
           </RouterLink>
+          <RouterLink
+            v-if="auth.hasRole('worker')"
+            :to="{ name: 'requests' }"
+            class="flex items-center gap-1.5 hover:text-accent"
+            active-class="text-accent font-medium"
+          >
+            <IconRequest /> Zahtjevi
+          </RouterLink>
 
+          <RouterLink
+            v-if="auth.hasRole('worker')"
+            :to="{ name: 'fingerprints' }"
+            class="flex items-center gap-1.5 hover:text-accent"
+            active-class="text-accent font-medium"
+          >
+            <IconPrint /> Otisci
+          </RouterLink>
           <RouterLink
             v-if="auth.hasRole('admin')"
             :to="{ name: 'trash' }"

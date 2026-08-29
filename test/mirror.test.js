@@ -17,24 +17,39 @@ const here = dirname(fileURLToPath(import.meta.url));
  * off on chords that will not be what ships. Nothing else in either repository
  * notices that, so this does.
  */
+/*
+ * Every file that exists in both repositories, and must not drift.
+ *
+ * AI-NOTE: add to this list the moment a file is copied across, not later.
+ * fingerprint.js was mirrored a day after chordpro.js and nothing would have
+ * noticed it diverging — the same silent failure this test exists to prevent,
+ * one file along.
+ */
+const MIRRORED = [
+  ['chordpro.js', 'chordpro.js'],
+  ['fingerprint.js', 'fingerprint.js']
+];
+
 describe('ogledalo', () => {
-  test('chordpro.js je identican onom u sajtu', () => {
-    const mine = join(here, '../src/utils/chordpro.js');
-    const theirs = join(here, '../../octava-app/app/utils/chordpro.js');
+  for (const [mineName, theirsName] of MIRRORED) {
+    test(`${mineName} je identican onom u sajtu`, () => {
+      const mine = join(here, '../src/utils/', mineName);
+      const theirs = join(here, '../../octava-app/app/utils/', theirsName);
 
-    let site;
-    try {
-      site = readFileSync(theirs, 'utf8');
-    } catch {
-      // A checkout without the sibling repository should not fail the suite —
-      // there is simply nothing to compare against.
-      console.log('    (octava-app nije prisutan, preskaceno)');
-      return;
-    }
+      let site;
+      try {
+        site = readFileSync(theirs, 'utf8');
+      } catch {
+        // A checkout without the sibling repository should not fail the suite —
+        // there is simply nothing to compare against.
+        console.log(`    (octava-app nije prisutan, preskaceno: ${mineName})`);
+        return;
+      }
 
-    assert.equal(
-      readFileSync(mine, 'utf8'), site,
-      'chordpro.js se razisao izmedju dashboarda i sajta — prepisi jedan preko drugog'
-    );
-  });
+      assert.equal(
+        readFileSync(mine, 'utf8'), site,
+        `${mineName} se razisao izmedju dashboarda i sajta — prepisi jedan preko drugog`
+      );
+    });
+  }
 });

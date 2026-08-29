@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, useTemplateRef } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import client from '../api/client';
 import ChordSheet from '../components/ChordSheet.vue';
 import ImportPanel from '../components/ImportPanel.vue';
@@ -13,6 +13,7 @@ import IconPublish from '~icons/material-symbols/publish-rounded';
 
 const props = defineProps({ id: { type: String, default: null } });
 const router = useRouter();
+const route = useRoute();
 const editor = useTemplateRef('editor');
 const toasts = useToasts();
 
@@ -61,7 +62,19 @@ onMounted(async () => {
     // The picker degrades to empty; the song can still be saved without one.
   }
 
-  if (!props.id) return;
+  /*
+   * A new song can arrive carrying a brief.
+   *
+   * AI-DECISION: the Requests view links here with the title and artist in the
+   * query, so acting on a request does not begin by retyping what the request
+   * already said. Retyping is where a letter goes missing between two screens,
+   * and the song that ships is then not quite the one somebody asked for.
+   */
+  if (!props.id) {
+    if (route.query.title) form.value.title = String(route.query.title);
+    if (route.query.artist) form.value.artist = String(route.query.artist);
+    return;
+  }
   try {
     const { data } = await client.get(`/songs/${props.id}`);
     form.value = {
