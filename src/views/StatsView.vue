@@ -5,6 +5,7 @@ import IconViews from '~icons/material-symbols/visibility-rounded';
 import IconSaved from '~icons/material-symbols/favorite-rounded';
 import IconRate from '~icons/material-symbols/trending-up-rounded';
 import IconSongs from '~icons/material-symbols/queue-music-rounded';
+import IconHealth from '~icons/material-symbols/ecg-heart-rounded';
 
 const overview = ref(null);
 const songs = ref([]);
@@ -19,8 +20,13 @@ const SORTS = [
   { key: 'views', label: 'Najgledanije' },
   { key: 'favorites', label: 'Najčuvanije' },
   { key: 'rate', label: 'Najbolja stopa' },
-  { key: 'recent', label: 'Najnovije' }
+  { key: 'recent', label: 'Najnovije' },
+  { key: 'gaps', label: 'Rupe u katalogu' }
 ];
+
+/** The gaps tab answers a different question and so reads a different route. */
+const gaps = ref([]);
+const isGaps = computed(() => sort.value === 'gaps');
 
 /**
  * Bars are scaled to the largest value on the page, not to the all-time
@@ -28,6 +34,7 @@ const SORTS = [
  * the comparison that matters — these songs against each other — would be lost.
  */
 const peakViews = computed(() => Math.max(1, ...songs.value.map((s) => s.views)));
+const peakGap = computed(() => Math.max(1, ...gaps.value.map((g) => g.empty)));
 const peakSaves = computed(() => Math.max(1, ...songs.value.map((s) => s.favorites)));
 
 const number = (value) => new Intl.NumberFormat('bs').format(value || 0);
@@ -39,11 +46,21 @@ async function load() {
   try {
     const [o, s] = await Promise.all([
       overview.value ? Promise.resolve({ data: overview.value }) : client.get('/stats/overview'),
-      client.get('/stats/songs', { params: { sort: sort.value, page: page.value, limit: 25 } })
+      isGaps.value
+        ? client.get('/stats/gaps', { params: { limit: 25 } })
+        : client.get('/stats/songs', { params: { sort: sort.value, page: page.value, limit: 25 } })
     ]);
     overview.value = o.data;
-    songs.value = s.data.songs;
-    meta.value = s.data.meta;
+
+    if (isGaps.value) {
+      gaps.value = s.data.artists;
+      // The gaps list is a whole answer, not a window onto one: paging it would
+      // invite reading page four of a work queue nobody has started.
+      meta.value = null;
+    } else {
+      songs.value = s.data.songs;
+      meta.value = s.data.meta;
+    }
   } catch (err) {
     error.value = err.response?.data?.message || 'Učitavanje nije uspjelo.';
   } finally {
@@ -65,10 +82,58 @@ function changeSort(key) {
 
   <p v-if="error" class="mb-4 rounded bg-accent-soft px-4 py-2 text-sm text-accent">{{ error }}</p>
 
+  <!--
+    Catalogue health, first and widest.
+
+    AI-DECISION: this panel exists because the page used to open with 2.8
+    million views and 1,569 published songs, and neither number told anyone that
+    all but twenty-two of those songs are a title with placeholder words or
+    nothing at all under it. A songbook's health is what share of it can be
+    played, and that was the one figure the dashboard did not show.
+  -->
+  <section v-if="overview?.health" class="mb-4 rounded-lg border border-line bg-panel p-4">
+    <div class="flex flex-wrap items-baseline justify-between gap-2">
+      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint">
+        <IconHealth /> Zdravlje kataloga
+      </p>
+      <p class="font-mono text-2xl font-semibold" :class="overview.health.share < 0.1 ? 'text-warn' : 'text-ok'">
+        {{ percent(overview.health.share) }}
+      </p>
+    </div>
+
+    <p class="mt-1 text-xs text-muted">
+      {{ number(overview.health.playable) }} od {{ number(overview.health.total) }} pjesama ima akorde
+      koje nije napisao generator.
+    </p>
+
+    <div class="mt-3 flex h-2.5 overflow-hidden rounded-full bg-sunken">
+      <div class="h-full bg-ok" :style="{ width: (overview.health.playable / overview.health.total * 100) + '%' }" />
+      <div class="h-full bg-warn" :style="{ width: (overview.health.placeholder / overview.health.total * 100) + '%' }" />
+    </div>
+
+    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+      <span><span class="mr-1 inline-block size-2 rounded-full bg-ok align-middle" />{{ number(overview.health.playable) }} s pravim akordima</span>
+      <span><span class="mr-1 inline-block size-2 rounded-full bg-warn align-middle" />{{ number(overview.health.placeholder) }} lorem ipsum</span>
+      <span><span class="mr-1 inline-block size-2 rounded-full bg-sunken align-middle" />{{ number(overview.health.empty) }} bez ijednog akorda</span>
+      <span v-if="overview.health.needsReview" class="text-warn">
+        {{ overview.health.needsReview }} čeka provjeru
+      </span>
+    </div>
+  </section>
+
   <div v-if="overview" class="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <div class="rounded-lg border border-line bg-panel p-4">
       <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconViews /> Pregleda</p>
       <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.views) }}</p>
+      <!--
+        AI-TRAP: the seed scripts assign views at random, so this figure is
+        mostly invented and the most-viewed list is sorted by noise. Saying so
+        here is cheaper than someone planning around it; the line removes itself
+        once the placeholder rows are gone.
+      -->
+      <p v-if="overview.seeded?.views" class="mt-0.5 text-xs text-warn">
+        {{ percent(overview.seeded.views / overview.views) }} zasijano, nije stvarni saobraćaj
+      </p>
     </div>
     <div class="rounded-lg border border-line bg-panel p-4">
       <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconSaved /> Sačuvano</p>
@@ -86,6 +151,19 @@ function changeSort(key) {
     </div>
   </div>
 
+  <!--
+    The small numbers, kept beside the big invented one on purpose. Ninety-six
+    ratings from twenty-one readers happened; the views did not.
+  -->
+  <div v-if="overview" class="mb-8 flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-line-soft bg-surface px-4 py-3 text-sm">
+    <span class="text-xs uppercase tracking-wide text-faint">Stvarno zabilježeno</span>
+    <span><span class="font-mono font-semibold">{{ number(overview.users) }}</span> <span class="text-muted">čitalaca</span></span>
+    <span><span class="font-mono font-semibold">{{ number(overview.ratings) }}</span> <span class="text-muted">ocjena</span></span>
+    <span><span class="font-mono font-semibold text-accent">{{ number(overview.favorites) }}</span> <span class="text-muted">sačuvanih</span></span>
+    <span><span class="font-mono font-semibold">{{ number(overview.reviews) }}</span> <span class="text-muted">recenzija</span></span>
+    <span><span class="font-mono font-semibold">{{ number(overview.requests) }}</span> <span class="text-muted">zahtjeva</span></span>
+  </div>
+
   <div class="mb-4 flex flex-wrap gap-2 border-b border-line pb-3 text-sm">
     <button
       v-for="option in SORTS" :key="option.key"
@@ -97,6 +175,42 @@ function changeSort(key) {
 
   <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
 
+  <!-- The one list here that says what to do rather than what happened. -->
+  <table v-else-if="isGaps" class="w-full text-sm">
+    <thead class="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
+      <tr>
+        <th class="pb-2">Izvođač</th>
+        <th class="pb-2 w-[40%]">Pjesama bez akorda</th>
+        <th class="pb-2 text-right">Od ukupno</th>
+        <th class="pb-2 text-right">Udio</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr
+        v-for="a in gaps" :key="a._id"
+        class="group cursor-pointer border-b border-line-soft transition hover:bg-raised/50"
+        @click="$router.push({ name: 'songs', query: { q: a.name } })"
+      >
+        <td class="py-2.5 pr-4">
+          <span class="font-medium group-hover:text-accent group-hover:underline">{{ a.name }}</span>
+        </td>
+        <td class="py-2.5 pr-4">
+          <div class="flex items-center gap-2">
+            <div class="h-2 flex-1 overflow-hidden rounded-full bg-sunken">
+              <div class="h-full rounded-full bg-warn" :style="{ width: (a.empty / peakGap * 100) + '%' }" />
+            </div>
+            <span class="w-10 shrink-0 text-right font-mono text-xs text-warn">{{ a.empty }}</span>
+          </div>
+        </td>
+        <td class="py-2.5 text-right font-mono text-xs text-muted">{{ a.songs }}</td>
+        <td class="py-2.5 text-right font-mono text-xs text-muted">{{ percent(a.share) }}</td>
+      </tr>
+      <tr v-if="!gaps.length">
+        <td colspan="4" class="py-6 text-center text-faint">Nijedan izvođač nema pjesmu bez akorda.</td>
+      </tr>
+    </tbody>
+  </table>
+
   <table v-else class="w-full text-sm">
     <thead class="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
       <tr>
@@ -107,9 +221,13 @@ function changeSort(key) {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="song in songs" :key="song._id" class="border-b border-line-soft">
+      <tr
+        v-for="song in songs" :key="song._id"
+        class="group cursor-pointer border-b border-line-soft transition hover:bg-raised/50"
+        @click="$router.push({ name: 'song-edit', params: { id: song._id } })"
+      >
         <td class="py-2.5 pr-4">
-          <span class="font-medium">{{ song.title }}</span>
+          <span class="font-medium group-hover:text-accent group-hover:underline">{{ song.title }}</span>
           <span class="ml-2 text-xs text-faint">{{ song.artist?.name }}</span>
           <span v-if="song.status === 'draft'" class="ml-2 rounded bg-raised px-1.5 py-0.5 text-[10px] text-muted">
             skica
@@ -135,6 +253,9 @@ function changeSort(key) {
         </td>
 
         <td class="py-2.5 text-right font-mono text-xs text-muted">{{ percent(song.saveRate) }}</td>
+      </tr>
+      <tr v-if="!songs.length">
+        <td colspan="4" class="py-6 text-center text-faint">Nema pjesama za prikaz.</td>
       </tr>
     </tbody>
   </table>

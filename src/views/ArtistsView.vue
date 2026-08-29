@@ -1,13 +1,24 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import AppModal from '../components/AppModal.vue';
 import { initials, avatarStyle } from '../utils/avatar';
+import { filterByQuery } from '../utils/textFilter';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
+import { useAuthStore } from '../stores/auth';
 import IconAdd from '~icons/material-symbols/add-circle-outline-rounded';
+import IconPrev from '~icons/material-symbols/chevron-left-rounded';
+import IconNext from '~icons/material-symbols/chevron-right-rounded';
 import IconUpload from '~icons/material-symbols/upload-rounded';
 import IconDelete from '~icons/material-symbols/delete-outline-rounded';
+import IconEdit from '~icons/material-symbols/edit-outline-rounded';
 import IconPerson from '~icons/material-symbols/person-outline-rounded';
+import IconFormatBold from '~icons/material-symbols/format-bold-rounded';
+import IconFormatItalic from '~icons/material-symbols/format-italic-rounded';
+import IconFormatStrikethrough from '~icons/material-symbols/format-strikethrough-rounded';
+import IconLink from '~icons/material-symbols/link-rounded';
+import IconFormatListBulleted from '~icons/material-symbols/format-list-bulleted-rounded';
+import IconFormatQuote from '~icons/material-symbols/format-quote-rounded';
 
 /**
  * Artists, and everything that hangs off one.
@@ -17,6 +28,7 @@ import IconPerson from '~icons/material-symbols/person-outline-rounded';
  * place they can be created on purpose.
  */
 const toasts = useToasts();
+const auth = useAuthStore();
 
 const MAX_BYTES = 10 * 1024;
 
@@ -46,33 +58,6 @@ const genres = ref([]);
 const loading = ref(true);
 const filter = ref('');
 const countryFilter = ref('');
-const trashMode = ref(false);
-const trashed = ref([]);
-
-async function loadTrash() {
-  try {
-    const { data } = await client.get('/artists/trash');
-    trashed.value = data.artists || [];
-  } catch (err) {
-    toasts.error(err.response?.data?.message || 'Učitavanje korpe nije uspjelo.');
-  }
-}
-
-async function toggleTrash() {
-  trashMode.value = !trashMode.value;
-  if (trashMode.value) await loadTrash();
-}
-
-async function restoreArtist(a) {
-  try {
-    await client.post(`/artists/${a._id}/restore`);
-    trashed.value = trashed.value.filter((x) => x._id !== a._id);
-    toasts.success(`Vraćen: ${a.name}`);
-    await load();
-  } catch (err) {
-    toasts.error(err.response?.data?.message || 'Vraćanje nije uspjelo.');
-  }
-}
 
 /**
  * Narrows the grid to artists with no photograph.
@@ -89,16 +74,30 @@ const editing = ref(null);
 const form = ref({ name: '', country: '', bio: '', genres: [] });
 const fileInput = ref(null);
 /** Bumped after an upload so the browser refetches instead of using its cache. */
-const imageVersion = ref(Date.now());
+/**
+ * AI-TRAP: this used to be `ref(Date.now())`, stamped onto every portrait URL.
+ * A fresh value on every mount meant a fresh URL on every visit, so the day-long
+ * Cache-Control that serveImage already sends never once got used — all 125
+ * images were refetched every time the screen opened. That alone spent the
+ * public rate limit, and the next write (saving an edited artist) came back 429.
+ * The key is now the image's own update time: stable across visits, different
+ * only when the picture actually changed.
+ */
+const cacheKey = (a) => (a.imageUpdatedAt ? Date.parse(a.imageUpdatedAt) : 0);
 
 const apiBase = import.meta.env.VITE_API_URL || '/api';
 
 const visible = computed(() => {
-  const q = filter.value.trim().toLowerCase();
-  return artists.value.filter(
-    (a) => a.name.toLowerCase().includes(q) && (!missingImage.value || !a.hasImage)
-         && (!countryFilter.value || a.country === countryFilter.value)
+  // Narrow by the checkboxes first, then rank what is left: the ordering the
+  // filter produces is the answer to the query, and applying it before the
+  // other conditions would only sort rows that are about to be dropped.
+  const narrowed = artists.value.filter(
+    (a) => (!missingImage.value || !a.hasImage)
+        && (!countryFilter.value || a.country === countryFilter.value)
   );
+  // AI-NOTE: was `name.toLowerCase().includes(q)`, which missed both things
+  // people actually type — "zeljko" for Željko, and any typo at all.
+  return filterByQuery(narrowed, filter.value, (a) => a.name);
 });
 
 /**
@@ -138,13 +137,52 @@ async function load() {
   }
 }
 
+/**
+ * Brings the editor into view.
+ *
+ * AI-TRAP: the panel renders at the top of the page, above a grid of 125
+ * artists. Pressing "Uredi" on anybody below the fold used to look like a dead
+ * button — the form opened two thousand pixels above the viewport and the
+ * screen did not move, so editing appeared not to exist at all. Anything that
+ * opens this panel has to reveal it.
+ */
+const editor = ref(null);
+
+async function revealEditor() {
+  await nextTick();
+  if (!editor.value) return;
+
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  editor.value.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+  // Focus the name rather than the panel: it says which artist you are on and
+  // is the field most edits change.
+  editor.value.querySelector('input')?.focus({ preventScroll: true });
+}
+
+const stagedImageFile = ref(null);
+const stagedImagePreview = ref(null);
+const stagedImageRemove = ref(false);
+
+function resetStagedImage() {
+  if (stagedImagePreview.value && stagedImagePreview.value.startsWith('blob:')) {
+    URL.revokeObjectURL(stagedImagePreview.value);
+  }
+  stagedImageFile.value = null;
+  stagedImagePreview.value = null;
+  stagedImageRemove.value = false;
+}
+
 function startCreate() {
   editing.value = {};
+  resetStagedImage();
   form.value = { name: '', country: '', origin: '', website: '', activeFrom: '', activeTo: '', bio: '', genres: [] };
+  revealEditor();
 }
 
 function startEdit(a) {
   editing.value = a;
+  loadEditSongs(a);
+  resetStagedImage();
   form.value = {
     name: a.name,
     country: a.country || '',
@@ -155,6 +193,12 @@ function startEdit(a) {
     bio: a.bio || '',
     genres: (a.genres || []).map((g) => g.slug || g)
   };
+  revealEditor();
+}
+
+function cancelEdit() {
+  resetStagedImage();
+  editing.value = null;
 }
 
 async function save() {
@@ -173,12 +217,25 @@ async function save() {
       bio: form.value.bio,
       genres: form.value.genres
     };
-    const { data } = editing.value?._id
-      ? await client.put(`/artists/${editing.value._id}`, body)
-      : await client.post('/artists', body);
+    const isNew = !editing.value?._id;
+    const { data } = isNew
+      ? await client.post('/artists', body)
+      : await client.put(`/artists/${editing.value._id}`, body);
 
-    toasts.success(editing.value?._id ? 'Izmjene sačuvane.' : `Dodan: ${data.artist.name}`);
-    editing.value = data.artist;
+    const artistId = data.artist._id;
+
+    // Apply staged image changes
+    if (stagedImageFile.value) {
+      await client.post(`/artists/${artistId}/image`, stagedImageFile.value, {
+        headers: { 'Content-Type': 'image/webp' }
+      });
+    } else if (stagedImageRemove.value && !isNew && editing.value?.hasImage) {
+      await client.delete(`/artists/${artistId}/image`);
+    }
+
+    resetStagedImage();
+    toasts.success(isNew ? `Dodan: ${data.artist.name}` : 'Izmjene sačuvane.');
+    editing.value = null;
     await load();
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Spašavanje nije uspjelo.');
@@ -187,13 +244,55 @@ async function save() {
   }
 }
 
+/**
+ * The songs filed under the artist being edited.
+ *
+ * AI-DECISION: read from the public GET /artists/:slug rather than a new admin
+ * endpoint. That route already returns an artist's songs sorted and paged, and
+ * it widens to include drafts when the caller is staff — which the dashboard
+ * always is. A second endpoint would have been the same query with a different
+ * name in front of it.
+ *
+ * Why it belongs here at all: the panel is where somebody decides to delete an
+ * artist, and until now the only thing on the screen saying what that costs was
+ * a number in the row behind it.
+ */
+const editSongs = ref([]);
+const editSongsTotal = ref(0);
+const editSongsLoading = ref(false);
+
+async function loadEditSongs(artist) {
+  editSongs.value = [];
+  editSongsTotal.value = 0;
+  if (!artist?.slug) return;
+
+  editSongsLoading.value = true;
+  try {
+    const { data } = await client.get(`/artists/${artist.slug}`, { params: { limit: 100 } });
+    editSongs.value = data.songs || [];
+    editSongsTotal.value = data.meta?.total ?? editSongs.value.length;
+  } catch {
+    // A panel that cannot list the songs is still a usable panel; the count in
+    // the row behind it is not wrong, only less detailed.
+    editSongs.value = [];
+  } finally {
+    editSongsLoading.value = false;
+  }
+}
+
 const removingArtist = ref(null);
 
+/**
+ * AI-TRAP: withSongs is what the API refuses to assume. Without it a deletion
+ * of an artist who has songs comes back 409 and nothing happens — which is the
+ * right default for anything calling the API, and wrong only here, where the
+ * dialog has just said the number out loud and been answered.
+ */
 async function removeArtist(a) {
   try {
-    await client.delete(`/artists/${a._id}`);
-    toasts.success('Obrisan.');
-    if (editing.value?._id === a._id) editing.value = null;
+    const { data } = await client.delete(`/artists/${a._id}`, { params: { withSongs: 1 } });
+    toasts.success(data.songs ? `Obrisan — ${data.songs} pjesama u kanti.` : 'Obrisan.');
+    if (editing.value?._id === a._id) cancelEdit();
     await load();
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Brisanje nije uspjelo.');
@@ -201,15 +300,11 @@ async function removeArtist(a) {
 }
 
 /**
- * Checked here as well as on the server.
- *
- * The server is what actually enforces this; doing it in the browser too means
- * somebody who picked a 3 MB photo learns immediately instead of after the
- * upload finishes.
+ * Validates image locally before staging it for upload upon save.
  */
 async function pickImage(event) {
   const file = event.target.files?.[0];
-  if (!file || !editing.value?._id) return;
+  if (!file) return;
 
   if (file.size > MAX_BYTES) {
     toasts.error(`Slika je ${(file.size / 1024).toFixed(1)} KB; najviše je 10 KB.`);
@@ -225,32 +320,23 @@ async function pickImage(event) {
     return;
   }
 
-  try {
-    await client.post(`/artists/${editing.value._id}/image`, file, {
-      headers: { 'Content-Type': 'image/webp' }
-    });
-    toasts.success('Slika postavljena.');
-    imageVersion.value = Date.now();
-    await load();
-    editing.value = artists.value.find((a) => a._id === editing.value._id) || editing.value;
-  } catch (err) {
-    toasts.error(err.response?.data?.message || 'Slanje nije uspjelo.');
-  } finally {
-    event.target.value = '';
+  if (stagedImagePreview.value && stagedImagePreview.value.startsWith('blob:')) {
+    URL.revokeObjectURL(stagedImagePreview.value);
   }
+
+  stagedImageFile.value = file;
+  stagedImagePreview.value = URL.createObjectURL(file);
+  stagedImageRemove.value = false;
+  event.target.value = '';
 }
 
-async function removeImage() {
-  if (!editing.value?._id) return;
-  try {
-    await client.delete(`/artists/${editing.value._id}/image`);
-    toasts.success('Slika uklonjena.');
-    imageVersion.value = Date.now();
-    await load();
-    editing.value = artists.value.find((a) => a._id === editing.value._id) || editing.value;
-  } catch (err) {
-    toasts.error(err.response?.data?.message || 'Uklanjanje nije uspjelo.');
+function removeImage() {
+  if (stagedImagePreview.value && stagedImagePreview.value.startsWith('blob:')) {
+    URL.revokeObjectURL(stagedImagePreview.value);
   }
+  stagedImageFile.value = null;
+  stagedImagePreview.value = null;
+  stagedImageRemove.value = true;
 }
 
 /** Only the countries the loaded artists actually have. */
@@ -268,9 +354,37 @@ const presentCountries = computed(() => {
     .sort((x, y) => y.count - x.count);
 });
 
+/**
+ * Paged in the client, like the fingerprints list and for the same reason: the
+ * whole set stays in memory so the filter searches all 125 rather than whatever
+ * page happened to be on screen, and only the rendering is cut.
+ *
+ * 48 a page because the grid is two columns at sm and three at lg — a number
+ * divisible by both leaves no ragged last row at either width.
+ */
+const PER_PAGE = 48;
+const page = ref(1);
+
+const pageCount = computed(() => Math.max(1, Math.ceil(visible.value.length / PER_PAGE)));
+
+const pageArtists = computed(() => {
+  const start = (page.value - 1) * PER_PAGE;
+  return visible.value.slice(start, start + PER_PAGE);
+});
+
+// Narrowing to fewer pages than the one being read would leave an empty grid
+// with no way back to the rows that are still there.
+watch([filter, countryFilter, missingImage], () => { page.value = 1; });
+watch(pageCount, (count) => { if (page.value > count) page.value = count; });
+
+function turn(to) {
+  page.value = Math.min(pageCount.value, Math.max(1, to));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 const withoutImage = computed(() => artists.value.filter((a) => !a.hasImage).length);
 
-const imageUrl = (a) => `${apiBase}/artists/${a._id}/image?v=${imageVersion.value}`;
+const imageUrl = (a) => `${apiBase}/artists/${a._id}/image?v=${cacheKey(a)}`;
 
 onMounted(load);
 </script>
@@ -280,29 +394,6 @@ onMounted(load);
     <div class="mb-6 flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold tracking-tight">Izvođači</h1>
       <span class="text-sm text-faint">{{ artists.length }}</span>
-
-      <button
-        type="button"
-        class="rounded border px-2.5 py-1 text-xs transition"
-        :class="missingImage
-          ? 'border-accent bg-accent-soft text-accent'
-          : 'border-line-strong text-muted hover:border-accent hover:text-accent'"
-        :title="'Prikaži samo izvođače bez slike'"
-        @click="missingImage = !missingImage"
-      >
-        bez slike
-        <span class="ml-1 font-mono">{{ withoutImage }}</span>
-      </button>
-
-      <button
-        type="button"
-        class="rounded border px-2.5 py-1 text-xs transition"
-        :class="trashMode
-          ? 'border-accent bg-accent-soft text-accent'
-          : 'border-line-strong text-muted hover:border-accent hover:text-accent'"
-        title="Obrisani izvođači"
-        @click="toggleTrash"
-      >korpa</button>
 
       <select
         v-model="countryFilter"
@@ -314,6 +405,10 @@ onMounted(load);
           {{ c.name }} ({{ c.count }})
         </option>
       </select>
+
+      <span v-if="withoutImage" class="text-xs text-muted">
+        {{ withoutImage }} bez slike
+      </span>
 
       <input
         v-model="filter" placeholder="Filtriraj po imenu"
@@ -329,7 +424,7 @@ onMounted(load);
 
     <!-- The editor sits above the list rather than in a dialog: uploading a
          picture and checking it against the others is one task, not two. -->
-    <div v-if="editing" class="mb-6 rounded border border-accent/30 bg-accent/[0.03] px-4 py-4">
+    <div v-if="editing" ref="editor" class="mb-6 rounded border border-accent/30 bg-accent/[0.03] px-4 py-4">
       <h2 class="mb-3 text-sm font-medium">
         {{ editing._id ? `Uređivanje: ${editing.name}` : 'Novi izvođač' }}
       </h2>
@@ -403,19 +498,113 @@ onMounted(load);
         </div>
       </div>
 
-      <label class="mt-4 block">
-        <span class="text-sm font-medium">Biografija</span>
-        <textarea
-          v-model="form.bio" rows="3" maxlength="2000"
-          class="mt-1 w-full rounded border border-line-strong px-3 py-2 text-sm outline-none focus:border-accent"
-        />
-      </label>
+      <!-- Biografija with Microsoft Word-like formatting toolbar -->
+      <div class="mt-4">
+        <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+          <span class="text-sm font-medium">Biografija</span>
 
-      <!-- Only after saving: the picture is posted to an id that does not exist
-           until the artist does. -->
-      <div v-if="editing._id" class="mt-4 flex flex-wrap items-center gap-4">
+          <div class="flex flex-wrap items-center gap-0.5 rounded border border-line-strong bg-raised/60 p-0.5 text-xs">
+            <button
+              type="button"
+              class="flex size-6 items-center justify-center rounded text-muted hover:bg-panel hover:text-ink transition"
+              title="Podebljano (Bold) - **tekst**"
+              @click="wrapSelection('**', '**', 'podebljano')"
+            >
+              <IconFormatBold class="text-sm" />
+            </button>
+            <button
+              type="button"
+              class="flex size-6 items-center justify-center rounded text-muted hover:bg-panel hover:text-ink transition"
+              title="Kurziv (Italic) - *tekst*"
+              @click="wrapSelection('*', '*', 'kurziv')"
+            >
+              <IconFormatItalic class="text-sm" />
+            </button>
+            <button
+              type="button"
+              class="flex size-6 items-center justify-center rounded text-muted hover:bg-panel hover:text-ink transition"
+              title="Precrtano (Strikethrough) - ~~tekst~~"
+              @click="wrapSelection('~~', '~~', 'precrtano')"
+            >
+              <IconFormatStrikethrough class="text-sm" />
+            </button>
+
+            <span class="mx-0.5 h-3.5 w-px bg-line" aria-hidden="true" />
+
+            <button
+              type="button"
+              class="flex size-6 items-center justify-center rounded text-muted hover:bg-panel hover:text-ink transition"
+              title="Link - [naslov](https://...)"
+              @click="insertLink"
+            >
+              <IconLink class="text-sm" />
+            </button>
+            <button
+              type="button"
+              class="flex size-6 items-center justify-center rounded text-muted hover:bg-panel hover:text-ink transition"
+              title="Lista sa tačkama"
+              @click="insertLinePrefix('• ')"
+            >
+              <IconFormatListBulleted class="text-sm" />
+            </button>
+            <button
+              type="button"
+              class="flex size-6 items-center justify-center rounded text-muted hover:bg-panel hover:text-ink transition"
+              title="Citat / Navod"
+              @click="insertLinePrefix('> ')"
+            >
+              <IconFormatQuote class="text-sm" />
+            </button>
+
+            <span class="mx-0.5 h-3.5 w-px bg-line" aria-hidden="true" />
+
+            <button
+              type="button"
+              class="rounded px-2 py-0.5 text-[11px] font-medium transition"
+              :class="bioPreview ? 'bg-accent text-on-accent' : 'text-muted hover:bg-panel hover:text-ink'"
+              @click="bioPreview = !bioPreview"
+            >
+              {{ bioPreview ? 'Uredi' : 'Pregled' }}
+            </button>
+          </div>
+        </div>
+
+        <div
+          v-if="bioPreview"
+          class="min-h-[5.5rem] rounded border border-line-strong bg-panel/70 p-3 text-xs leading-relaxed text-ink"
+        >
+          <div v-if="form.bio" v-html="renderBioPreview(form.bio)" />
+          <span v-else class="text-faint italic">Prazna biografija…</span>
+        </div>
+
+        <textarea
+          v-else
+          ref="bioInput"
+          v-model="form.bio"
+          rows="3"
+          maxlength="2000"
+          placeholder="Upiši biografiju (koristi alatnu traku iznad za podebljano, kurziv, precrtano, linkove, liste)…"
+          class="w-full rounded border border-line-strong bg-panel px-3 py-2 text-xs leading-relaxed outline-none focus:border-accent font-sans"
+        />
+
+        <div class="mt-1 flex items-center justify-between text-[11px] text-faint">
+          <span>Formatiranje: **podebljano**, *kurziv*, ~~precrtano~~, [link](https://), • lista, > citat</span>
+          <span>{{ (form.bio || '').length }} / 2000</span>
+        </div>
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center gap-4">
+        <!-- Staged preview or existing saved image or fallback -->
         <img
-          v-if="editing.hasImage" :src="imageUrl(editing)" alt=""
+          v-if="stagedImagePreview"
+          :src="stagedImagePreview"
+          alt="Pregled slike"
+          class="size-16 rounded object-cover ring-2 ring-accent"
+        >
+        <img
+          v-else-if="!stagedImageRemove && editing.hasImage"
+          :src="imageUrl(editing)"
+          alt=""
           class="size-16 rounded object-cover ring-1 ring-line"
         >
         <div v-else class="flex size-16 items-center justify-center rounded bg-raised text-dim">
@@ -426,21 +615,58 @@ onMounted(load);
           <input ref="fileInput" type="file" accept="image/webp" class="hidden" @change="pickImage">
           <div class="flex gap-2">
             <button
+              type="button"
               class="rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent"
               @click="fileInput.click()"
-            ><span class="flex items-center gap-1.5"><IconUpload /> Postavi sliku</span></button>
+            >
+              <span class="flex items-center gap-1.5">
+                <IconUpload />
+                {{ (stagedImagePreview || (!stagedImageRemove && editing.hasImage)) ? 'Promijeni sliku' : 'Postavi sliku' }}
+              </span>
+            </button>
             <button
-              v-if="editing.hasImage"
+              v-if="stagedImagePreview || (!stagedImageRemove && editing.hasImage)"
+              type="button"
               class="rounded border border-line-strong px-3 py-1.5 text-sm hover:border-danger hover:text-danger"
               @click="removeImage"
-            ><span class="flex items-center gap-1.5"><IconDelete /> Ukloni</span></button>
+            >
+              <span class="flex items-center gap-1.5"><IconDelete /> Ukloni</span>
+            </button>
           </div>
-          <p class="mt-1 text-xs text-faint">WebP, najviše 10 KB.</p>
+          <p class="mt-1 text-xs text-faint">WebP, najviše 10 KB. Slika se spašava klikom na „Sačuvaj”.</p>
         </div>
       </div>
 
+      <div v-if="editing._id" class="mt-5 border-t border-line-soft pt-4">
+        <h3 class="mb-2 text-sm font-medium">
+          Pjesme
+          <span class="ml-1 font-mono text-xs font-normal text-faint">{{ editSongsTotal }}</span>
+        </h3>
+
+        <p v-if="editSongsLoading" class="text-sm text-faint">Učitavanje…</p>
+        <p v-else-if="!editSongs.length" class="text-sm text-muted">Nema nijedne pjesme.</p>
+
+        <ul v-else class="max-h-64 divide-y divide-line-soft overflow-y-auto rounded border border-line">
+          <li
+            v-for="song in editSongs" :key="song._id"
+            class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+          >
+            <RouterLink
+              :to="`/songs/${song._id}/edit`"
+              class="truncate text-body transition-colors hover:text-accent"
+            >{{ song.title }}</RouterLink>
+
+            <span
+              v-if="song.status === 'draft'"
+              class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-semibold text-warn"
+            >skica</span>
+          </li>
+        </ul>
+
+      </div>
+
       <div class="mt-4 flex justify-end gap-2">
-        <button class="rounded px-4 py-2 text-sm text-muted hover:text-accent" @click="editing = null">
+        <button class="rounded px-4 py-2 text-sm text-muted hover:text-accent" @click="cancelEdit">
           Zatvori
         </button>
         <button
@@ -452,32 +678,9 @@ onMounted(load);
 
     <p v-if="loading" class="text-sm text-faint">Učitavanje…</p>
 
-    <!-- The bin, which is the whole reason a soft delete is safe to do. Without
-         somewhere to see and undo it, a hidden row is worse than a destroyed
-         one: it looks like data loss and is not. -->
-    <template v-else-if="trashMode">
-      <p v-if="!trashed.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
-        Korpa je prazna.
-      </p>
-      <ul v-else class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        <li
-          v-for="a in trashed" :key="a._id"
-          class="flex items-center gap-3 rounded border border-line bg-panel px-3 py-2"
-        >
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium">{{ a.name }}</p>
-            <p class="text-xs text-faint">
-              obrisao {{ a.deletedBy?.name || '—' }}
-            </p>
-          </div>
-          <button class="text-xs text-faint hover:text-ok" @click="restoreArtist(a)">Vrati</button>
-        </li>
-      </ul>
-    </template>
-
     <ul v-else class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       <li
-        v-for="a in visible" :key="a._id"
+        v-for="a in pageArtists" :key="a._id"
         class="flex items-center gap-3 rounded border border-line bg-panel px-3 py-2"
       >
         <img
@@ -505,19 +708,54 @@ onMounted(load);
           </p>
         </div>
 
-        <button class="text-xs text-faint hover:text-accent" @click="startEdit(a)">Uredi</button>
-        <button
-          class="text-xs text-faint hover:text-danger"
-          :title="a.songCount ? 'Ima pjesama — prvo ih prebaci' : 'Obriši'"
-          @click="removingArtist = a"
-        >Obriši</button>
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            class="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted transition hover:bg-raised hover:text-accent"
+            title="Uredi izvođača"
+            @click="startEdit(a)"
+          >
+            <IconEdit class="text-sm" />
+            <span>Uredi</span>
+          </button>
+          <button
+            v-if="auth.hasRole('admin')"
+            class="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted transition hover:bg-danger-soft hover:text-danger"
+            :title="a.songCount ? `Obriši izvođača i njegovih ${a.songCount} pjesama` : 'Obriši izvođača'"
+            @click="removingArtist = a"
+          >
+            <IconDelete class="text-sm" />
+            <span>Obriši</span>
+          </button>
+        </div>
       </li>
     </ul>
+
+    <nav v-if="pageCount > 1" class="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm">
+      <button
+        class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
+        :disabled="page <= 1" @click="turn(page - 1)"
+      ><span class="flex items-center gap-1"><IconPrev /> Prethodna</span></button>
+
+      <span class="text-muted">{{ page }} / {{ pageCount }}</span>
+
+      <button
+        class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
+        :disabled="page >= pageCount" @click="turn(page + 1)"
+      ><span class="flex items-center gap-1">Sljedeća <IconNext /></span></button>
+
+      <span class="w-full text-center font-mono text-xs text-faint">
+        {{ pageArtists.length }} od {{ visible.length }}
+      </span>
+    </nav>
 
     <AppModal
       :model-value="Boolean(removingArtist)"
       title="Obrisati izvođača?"
-      :description="removingArtist ? `„${removingArtist.name}“ ide u korpu i nestaje sa sajta. Može se vratiti.` : ''"
+      :description="removingArtist
+        ? (removingArtist.songCount
+          ? `Sigurno? Zajedno s izvođačem „${removingArtist.name}“ u kantu ide i svih ${removingArtist.songCount} njegovih pjesama. Sve nestaje sa sajta, i sve se može vratiti zajedno.`
+          : `„${removingArtist.name}“ ide u kantu i nestaje sa sajta. Može se vratiti.`)
+        : ''"
       confirm-label="Obriši"
       tone="danger"
       @update:model-value="(open) => { if (!open) removingArtist = null; }"

@@ -49,6 +49,13 @@ function toggleAll() {
 const page = ref(1);
 const status = ref('');
 const tag = ref('');
+const searchQuery = ref('');
+/**
+ * What the API thinks was meant, when nothing matched as typed. Only set on a
+ * corrected search, so its presence is the signal that the query was a miss.
+ */
+const suggestion = ref(null);
+let searchTimer = null;
 
 /**
  * The marks an automated import leaves behind.
@@ -64,7 +71,14 @@ const TAGS = [
   // copyright is not the same as being correct, and this tool is the only place
   // anybody can read them against what they know.
   { key: 'treba-provjeru', label: 'Treba provjeru' },
-  { key: 'uvoz', label: 'Iz uvoza' }
+  { key: 'uvoz', label: 'Iz uvoza' },
+  /*
+   * Placeholder lyrics. 594 published songs carry this tag and show lorem ipsum
+   * to actual readers, and until this filter existed there was no way to reach
+   * them from the tool at all — the single largest visible problem in the
+   * catalogue was invisible to the only screen that could fix it.
+   */
+  { key: 'demo', label: 'Lažni tekst' }
 ];
 
 const FILTERS = [
@@ -76,20 +90,54 @@ const FILTERS = [
 async function load() {
   loading.value = true;
   try {
-    const { data } = await client.get('/songs', {
-      params: {
-        page: page.value, limit: 25,
-        status: status.value || undefined,
-        tag: tag.value || undefined
-      }
-    });
-    songs.value = data.songs || [];
-    meta.value = data.meta;
+    const q = searchQuery.value.trim();
+    if (q) {
+      const { data } = await client.get('/songs/search', {
+        params: { q, page: page.value, limit: 25 }
+      });
+      songs.value = data.songs || [];
+      meta.value = data.meta;
+      suggestion.value = data.suggestion || null;
+    } else {
+      const { data } = await client.get('/songs', {
+        params: {
+          page: page.value, limit: 25,
+          status: status.value || undefined,
+          tag: tag.value || undefined
+        }
+      });
+      songs.value = data.songs || [];
+      meta.value = data.meta;
+      suggestion.value = null;
+    }
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Učitavanje nije uspjelo.');
   } finally {
     loading.value = false;
   }
+}
+
+function onSearchInput() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    page.value = 1;
+    selected.value = new Set();
+    load();
+  }, 250);
+}
+
+function useSuggestion() {
+  searchQuery.value = suggestion.value;
+  page.value = 1;
+  selected.value = new Set();
+  load();
+}
+
+function clearSearch() {
+  searchQuery.value = '';
+  page.value = 1;
+  selected.value = new Set();
+  load();
 }
 
 watch([page, status, tag], () => {
@@ -114,11 +162,13 @@ async function afterBulk() {
 
 function setFilter(key) {
   status.value = key;
+  searchQuery.value = '';
   page.value = 1;
 }
 
 function setTag(key) {
   tag.value = tag.value === key ? '' : key;
+  searchQuery.value = '';
   page.value = 1;
 }
 
@@ -176,25 +226,55 @@ async function toggleStatus(song) {
     </RouterLink>
   </div>
 
-  <div class="mb-4 flex gap-2 border-b border-line pb-3 text-sm">
-    <button
-      v-for="filter in FILTERS" :key="filter.key"
-      class="rounded px-3 py-1"
-      :class="status === filter.key ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
-      @click="setFilter(filter.key)"
-    >{{ filter.label }}</button>
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 text-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        v-for="filter in FILTERS" :key="filter.key"
+        class="rounded px-3 py-1"
+        :class="status === filter.key && !searchQuery ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
+        @click="setFilter(filter.key)"
+      >{{ filter.label }}</button>
 
-    <span class="mx-1 self-center h-5 w-px bg-sunken" aria-hidden="true" />
+      <span class="mx-1 self-center h-5 w-px bg-sunken" aria-hidden="true" />
 
-    <button
-      v-for="t in TAGS" :key="t.key"
-      class="rounded border px-2.5 py-1 text-xs transition"
-      :class="tag === t.key
-        ? 'border-accent bg-accent-soft text-accent'
-        : 'border-line-strong text-muted hover:border-accent hover:text-accent'"
-      @click="setTag(t.key)"
-    >{{ t.label }}</button>
+      <button
+        v-for="t in TAGS" :key="t.key"
+        class="rounded border px-2.5 py-1 text-xs transition"
+        :class="tag === t.key && !searchQuery
+          ? 'border-accent bg-accent-soft text-accent'
+          : 'border-line-strong text-muted hover:border-accent hover:text-accent'"
+        @click="setTag(t.key)"
+      >{{ t.label }}</button>
+    </div>
+
+    <div class="relative flex items-center">
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Pretraži po naslovu ili izvođaču…"
+        class="w-64 rounded border border-line-strong bg-panel px-3 py-1.5 pr-7 text-xs outline-none focus:border-accent"
+        @input="onSearchInput"
+      />
+      <button
+        v-if="searchQuery"
+        type="button"
+        class="absolute right-2 text-xs text-muted hover:text-ink"
+        aria-label="Obriši pretragu"
+        @click="clearSearch"
+      >×</button>
+    </div>
   </div>
+
+  <!-- Shown only when the query missed: the results below are what the corrected
+       spelling found, so saying so is what makes them make sense. -->
+  <p v-if="suggestion && !loading" class="-mt-2 mb-4 text-sm text-muted">
+    Ništa ne odgovara tačno tome. Prikazano za
+    <button
+      type="button"
+      class="font-medium text-accent underline underline-offset-2 hover:no-underline"
+      @click="useSuggestion"
+    >{{ suggestion }}</button>.
+  </p>
 
   <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
   <p v-else-if="!songs.length" class="text-sm text-muted">Nema pjesama za ovaj filter.</p>

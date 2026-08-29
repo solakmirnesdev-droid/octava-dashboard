@@ -1,11 +1,16 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import { useAuthStore } from '../stores/auth';
 import AppModal from '../components/AppModal.vue';
 import { fingerprint, packHashes, SAMPLE_RATE } from '../utils/fingerprint';
+import { filterByQuery } from '../utils/textFilter';
 import IconUpload from '~icons/material-symbols/upload-rounded';
+import IconPrev from '~icons/material-symbols/chevron-left-rounded';
+import IconNext from '~icons/material-symbols/chevron-right-rounded';
+import IconTab from '~icons/material-symbols/pip-rounded';
+import IconStop from '~icons/material-symbols/stop-circle-rounded';
 import IconDelete from '~icons/material-symbols/delete-outline-rounded';
 import IconWarn from '~icons/material-symbols/warning-outline-rounded';
 
@@ -38,28 +43,78 @@ const showMissing = ref(true);
 const printBySong = computed(() => new Map(prints.value.map((p) => [String(p.song?._id), p])));
 
 const rows = computed(() => {
-  const q = filter.value.trim().toLowerCase();
-  return songs.value
+  const paired = songs.value
     .map((s) => ({ song: s, print: printBySong.value.get(String(s._id)) || null }))
-    .filter((r) => {
-      if (q && !(`${r.song.title} ${r.song.artist?.name || ''}`.toLowerCase().includes(q))) return false;
-      return showMissing.value ? true : Boolean(r.print);
-    });
+    .filter((r) => (showMissing.value ? true : Boolean(r.print)));
+
+  // Title and performer together, so either one finds the row — and through the
+  // same matcher the API uses, so a typo that finds a song under Pjesme finds it
+  // here too rather than looking like one of the two screens is broken.
+  return filterByQuery(paired, filter.value, (r) => `${r.song.title} ${r.song.artist?.name || ''}`);
 });
+
+/**
+ * Paged here rather than by the API.
+ *
+ * AI-DECISION: the whole catalogue is already in memory — that is what lets the
+ * filter be typo-tolerant across all 1569 songs rather than across one page. Ask
+ * the server for a page and the filter could only ever search what it had been
+ * sent. So the list stays whole and only the rendering is cut, which also fixes
+ * what this was really costing: 1569 rows with two buttons each, built on every
+ * keystroke.
+ */
+const PER_PAGE = 50;
+const page = ref(1);
+
+const pageCount = computed(() => Math.max(1, Math.ceil(rows.value.length / PER_PAGE)));
+
+const pageRows = computed(() => {
+  const start = (page.value - 1) * PER_PAGE;
+  return rows.value.slice(start, start + PER_PAGE);
+});
+
+// Filtering to fewer pages than the one being read would otherwise leave an
+// empty table with no way back.
+watch([filter, showMissing], () => { page.value = 1; });
+watch(pageCount, (count) => { if (page.value > count) page.value = count; });
+
+function turn(to) {
+  page.value = Math.min(pageCount.value, Math.max(1, to));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 const withPrint = computed(() => rows.value.filter((r) => r.print).length);
 const stale = computed(() => prints.value.filter((p) => p.stale).length);
 
+/**
+ * Walks every page of published songs, so the entire catalogue is searchable
+ * rather than only the first 100 songs.
+ */
+async function fetchAllSongs() {
+  const out = [];
+  let page = 1;
+  let pages = 1;
+
+  do {
+    const { data } = await client.get('/songs', { params: { page, limit: 100, status: 'published' } });
+    out.push(...(data.songs || []));
+    pages = data.meta?.pages || 1;
+    page += 1;
+  } while (page <= pages);
+
+  return out;
+}
+
 async function load() {
   loading.value = true;
   try {
-    const [p, s] = await Promise.all([
+    const [p, allSongs] = await Promise.all([
       client.get('/recognize'),
-      client.get('/songs', { params: { limit: 100, status: 'published' } })
+      fetchAllSongs()
     ]);
     prints.value = p.data.prints || [];
     version.value = p.data.version;
-    songs.value = s.data.songs || [];
+    songs.value = allSongs;
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Učitavanje nije uspjelo.');
   } finally {
@@ -109,10 +164,91 @@ async function onFile(event) {
   const file = event.target.files?.[0];
   const song = pending.value;
   if (!file || !song) return;
+  await ingest(song, await file.arrayBuffer());
+  pending.value = null;
+}
 
+/**
+ * Capturing the audio of a browser tab.
+ *
+ * AI-DECISION: this exists because sourcing an audio file for each of 1569
+ * songs is the thing actually standing between the catalogue and working
+ * recognition. Asking the server to fetch the audio from a URL was rejected:
+ * that means downloading and storing copies of recordings we have no right to,
+ * whatever the fingerprint is later used for. Capture keeps the existing shape
+ * instead — the audio is decoded in this tab, only hashes are sent, and nothing
+ * is written to disk at any point.
+ *
+ * AI-TRAP: `video: true` is required even though the video track is discarded
+ * immediately. Chrome will not offer the tab picker for an audio-only request,
+ * so asking for audio alone silently leaves the operator with no tab to choose.
+ */
+const capturing = ref(null);
+const capturedSeconds = ref(0);
+let recorder = null;
+let captureTimer = null;
+
+async function startCapture(song) {
+  if (capturing.value || busyId.value) return;
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+  } catch {
+    // Dismissing the picker is a decision, not a failure worth a red toast.
+    return;
+  }
+
+  if (!stream.getAudioTracks().length) {
+    stream.getTracks().forEach((t) => t.stop());
+    toasts.error('Ta kartica nije podijelila zvuk.', {
+      detail: 'U prozoru za dijeljenje uključi „Podijeli zvuk kartice".'
+    });
+    return;
+  }
+
+  // The picture is never looked at; keeping it would record the screen for no
+  // reason and cost memory for the length of a whole song.
+  stream.getVideoTracks().forEach((t) => t.stop());
+
+  const audioOnly = new MediaStream(stream.getAudioTracks());
+  const chunks = [];
+  recorder = new MediaRecorder(audioOnly);
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+
+  recorder.onstop = async () => {
+    clearInterval(captureTimer);
+    audioOnly.getTracks().forEach((t) => t.stop());
+    const blob = new Blob(chunks, { type: recorder.mimeType });
+    capturing.value = null;
+    recorder = null;
+    if (blob.size) await ingest(song, await blob.arrayBuffer());
+  };
+
+  capturedSeconds.value = 0;
+  captureTimer = setInterval(() => { capturedSeconds.value += 1; }, 1000);
+  capturing.value = song._id;
+  recorder.start();
+
+  // Stopping the share from Chrome's own bar has to end the recording too, or
+  // the row sits on "Zaustavi" over a stream that no longer exists.
+  stream.getAudioTracks()[0].addEventListener('ended', stopCapture);
+}
+
+function stopCapture() {
+  if (recorder?.state === 'recording') recorder.stop();
+}
+
+const clock = (total) => `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+
+/** The one path from decoded audio to a stored print, whatever produced it. */
+async function ingest(song, arrayBuffer) {
   busyId.value = song._id;
   try {
-    const { samples, seconds } = await decodeTo8k(await file.arrayBuffer());
+    const { samples, seconds } = await decodeTo8k(arrayBuffer);
     const pairs = fingerprint(samples);
     if (!pairs.length) {
       toasts.error('Iz ovog snimka nije izašao nijedan otisak.', { detail: 'Provjeri da nije tišina.' });
@@ -134,7 +270,6 @@ async function onFile(event) {
     });
   } finally {
     busyId.value = null;
-    pending.value = null;
   }
 }
 
@@ -169,7 +304,7 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
       </p>
       <!-- Said out loud, because it is the question anybody sensible asks first. -->
       <p class="mt-1 text-xs text-faint">
-        Snimak se obrađuje u browseru i ne šalje se nigdje — na server ide samo otisak, iz kojeg se zvuk ne može vratiti.
+        „Sa kartice" uzima zvuk iz kartice u kojoj pjesma svira — pusti je bilo gdje i zaustavi na kraju. „Snimi" uzima gotov audio fajl.<br>Zvuk se obrađuje u browseru i ne šalje se nigdje — na server ide samo otisak, iz kojeg se zvuk ne može vratiti.
       </p>
     </div>
 
@@ -213,7 +348,7 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in rows" :key="row.song._id" class="border-b border-line-soft">
+        <tr v-for="row in pageRows" :key="row.song._id" class="border-b border-line-soft">
           <td class="py-2.5">
             <span class="font-medium">{{ row.song.title }}</span>
             <span class="ml-2 text-xs text-faint">{{ row.song.artist?.name }}</span>
@@ -233,10 +368,27 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
           <td class="py-2.5 font-mono text-xs text-faint">{{ when(row.print?.updatedAt) }}</td>
           <td class="py-2.5">
             <div class="flex justify-end gap-2">
+              <!-- Capture from a tab: play the song anywhere and take the sound
+                   straight from it, rather than hunting down an audio file. -->
+              <button
+                v-if="capturing === row.song._id"
+                class="flex items-center gap-1 rounded border border-warn bg-warn-soft px-2.5 py-1 text-xs
+                       font-medium text-warn"
+                @click="stopCapture"
+              ><IconStop /> Zaustavi {{ clock(capturedSeconds) }}</button>
+              <button
+                v-else
+                class="flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
+                       transition hover:border-accent hover:text-accent disabled:opacity-40"
+                :disabled="Boolean(busyId) || Boolean(capturing)"
+                title="Uzmi zvuk iz kartice u kojoj svira pjesma"
+                @click="startCapture(row.song)"
+              ><IconTab /> Sa kartice</button>
+
               <button
                 class="flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
                        transition hover:border-accent hover:text-accent disabled:opacity-40"
-                :disabled="busyId === row.song._id"
+                :disabled="busyId === row.song._id || Boolean(capturing)"
                 @click="pick(row.song)"
               ><IconUpload /> {{ busyId === row.song._id ? 'Obrađujem…' : (row.print ? 'Zamijeni' : 'Snimi') }}</button>
 
@@ -254,6 +406,27 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
         </tr>
       </tbody>
     </table>
+
+    <!-- Says how many rows the filter actually found, not just which page this
+         is: "50 od 1569" is the number somebody working through the catalogue
+         is keeping track of. -->
+    <nav v-if="pageCount > 1" class="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm">
+      <button
+        class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
+        :disabled="page <= 1" @click="turn(page - 1)"
+      ><span class="flex items-center gap-1"><IconPrev /> Prethodna</span></button>
+
+      <span class="text-muted">{{ page }} / {{ pageCount }}</span>
+
+      <button
+        class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
+        :disabled="page >= pageCount" @click="turn(page + 1)"
+      ><span class="flex items-center gap-1">Sljedeća <IconNext /></span></button>
+
+      <span class="w-full text-center font-mono text-xs text-faint">
+        {{ pageRows.length }} od {{ rows.length }}
+      </span>
+    </nav>
 
     <input ref="fileInput" type="file" accept="audio/*" class="hidden" @change="onFile">
 

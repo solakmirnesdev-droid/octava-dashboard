@@ -53,3 +53,18 @@ export function avatarStyle(name) {
   const color = avatarColor(name);
   return { backgroundColor: `color-mix(in srgb, ${color} 16%, white)`, color };
 }
+
+/** Consistent badge style for user roles: superadmin (glowing yellow), admin (orange glow), moderator/worker (grey). */
+export function roleBadgeClass(role) {
+  switch (role) {
+    case 'superadmin':
+      return 'border border-amber-400/60 bg-amber-400/20 text-amber-500 dark:text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.5)]';
+    case 'admin':
+      return 'border border-orange-500/60 bg-orange-500/20 text-orange-500 dark:text-orange-300 shadow-[0_0_10px_rgba(249,115,22,0.45)]';
+    case 'moderator':
+    case 'worker':
+    default:
+      return 'border border-line bg-raised text-muted';
+  }
+}
+

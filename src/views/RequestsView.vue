@@ -23,10 +23,11 @@ const toasts = useToasts();
 const router = useRouter();
 
 const TABS = [
-  { key: '', label: 'Otvoreni' },
+  { key: 'open', label: 'Otvoreni' },
   { key: 'in_progress', label: 'U radu' },
   { key: 'done', label: 'Urađeni' },
-  { key: 'rejected', label: 'Odbijeni' }
+  { key: 'rejected', label: 'Odbijeni' },
+  { key: '', label: 'Svi' }
 ];
 
 const STATUS_LABEL = {
@@ -41,7 +42,7 @@ const STATUS_CLASS = {
 
 const requests = ref([]);
 const meta = ref(null);
-const tab = ref('');
+const tab = ref('open');
 const loading = ref(true);
 const busyId = ref(null);
 
@@ -49,7 +50,7 @@ async function load() {
   loading.value = true;
   try {
     const { data } = await client.get('/requests', {
-      params: { limit: 50, status: tab.value || undefined, all: tab.value ? 'true' : undefined }
+      params: { limit: 50, status: tab.value || undefined }
     });
     requests.value = data.requests || [];
     meta.value = data.meta;
@@ -136,7 +137,7 @@ const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs') : '—');
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium">{{ r.title }}</p>
           <p class="truncate text-xs text-muted">{{ r.artist }}</p>
-          <p v-if="r.note" class="mt-0.5 truncate text-xs italic text-faint">„{{ r.note }}"</p>
+          <p v-if="r.note" class="mt-0.5 truncate text-xs italic text-faint">„{{ r.note }}“</p>
         </div>
 
         <span

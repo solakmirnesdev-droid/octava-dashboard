@@ -18,7 +18,17 @@ export default defineConfig({
   server: {
     port: 8000,
     proxy: {
-      '/api': { target: 'http://localhost:4000', changeOrigin: true }
+      '/api': { target: 'http://localhost:4000', changeOrigin: true },
+      /*
+       * The chat's socket, which does not travel over /api.
+       *
+       * AI-TRAP: ws:true is the whole point. Without the entry the client
+       * connects to Vite instead of the API and the chat simply never receives
+       * anything; without ws:true the handshake succeeds over polling and then
+       * the upgrade to a websocket fails, which looks like a chat that works
+       * for a minute and then stops.
+       */
+      '/socket.io': { target: 'http://localhost:4000', changeOrigin: true, ws: true }
     }
   }
 });

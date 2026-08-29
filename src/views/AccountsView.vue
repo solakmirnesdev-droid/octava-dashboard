@@ -9,6 +9,7 @@ import IconSignedIn from '~icons/material-symbols/login-rounded';
 import IconActive from '~icons/material-symbols/bolt-rounded';
 import IconShield from '~icons/material-symbols/shield-person-rounded';
 import IconLock from '~icons/material-symbols/lock-rounded';
+import IconAdd from '~icons/material-symbols/add-circle-outline-rounded';
 
 const toasts = useToasts();
 
@@ -23,11 +24,46 @@ const page = ref(1);
 const query = ref('');
 const filter = ref('');
 
+/**
+ * The ranks, in the order they stack. Labels are Bosnian like the rest of the
+ * screen — "Worker" was the one English word left in a table headed
+ * "Uredništvo" — and each hint names the powers the rank actually adds, since
+ * this list is now what somebody reads while deciding what to hand a colleague.
+ *
+ * AI-NOTE: there is no separate "moderator" rank. Hiding what a reader wrote is
+ * gated at `admin` (see router meta on /moderation), so a moderator IS an admin
+ * here. Splitting the two would mean a fourth rank and re-reading every gate.
+ */
 const ROLES = [
-  { key: 'worker', label: 'Worker', hint: 'unosi i uređuje pjesme' },
-  { key: 'admin', label: 'Admin', hint: 'plus brisanje pjesama' },
-  { key: 'superadmin', label: 'Superadmin', hint: 'plus nalozi' }
+  { key: 'worker', label: 'Urednik', hint: 'unosi i uređuje pjesme, otiske i zahtjeve' },
+  { key: 'admin', label: 'Admin', hint: 'plus brisanje, moderacija komentara, kanta i revizija' },
+  { key: 'superadmin', label: 'Superadmin', hint: 'plus nalozi uredništva' }
 ];
+
+/**
+ * Where the staff tab splits.
+ *
+ * AI-TRAP: derived from the position in ROLES, never from a list of role names.
+ * The rule this codebase repeats — compare ranks, do not enumerate them — is
+ * exactly what a hardcoded ['admin', 'superadmin'] would break: a rank added
+ * above superadmin would show in neither tab and its holder would vanish from
+ * the screen that manages them. Reading the index means a new entry in ROLES
+ * lands on the correct side by where it sits in the order.
+ *
+ * The split is a partition, not two filters: everything that is not at or above
+ * admin falls into the other tab, so nothing can drop out between them.
+ */
+const ADMIN_AT = ROLES.findIndex((r) => r.key === 'admin');
+const rankOf = (role) => ROLES.findIndex((r) => r.key === role);
+
+const visibleStaff = computed(() =>
+  tab.value === 'admins'
+    ? staff.value.filter((m) => rankOf(m.role) >= ADMIN_AT)
+    : staff.value.filter((m) => rankOf(m.role) < ADMIN_AT)
+);
+
+/** Matches MIN_STAFF_PASSWORD on the server; the form says so before sending. */
+const MIN_PASSWORD = 12;
 
 /**
  * Giving somebody a subscription by hand.
@@ -96,13 +132,68 @@ async function load() {
   }
 }
 
-watch([tab, page, filter], load);
+watch([tab, page, filter], (now, before) => {
+  // Both staff tabs read the same list; moving between them filters what is
+  // already held rather than asking the server the same question twice.
+  const staffToStaff = before?.[0] !== 'users' && now[0] !== 'users';
+  if (staffToStaff && staff.value.length) return;
+  load();
+});
 let debounce;
 watch(query, () => {
   clearTimeout(debounce);
   debounce = setTimeout(() => { page.value = 1; load(); }, 300);
 });
 onMounted(load);
+
+/**
+ * Creating a dashboard login.
+ *
+ * AI-DECISION: a dialog, not an inline panel like the artist editor. That one
+ * is inline because judging a photo against the grid behind it is part of the
+ * job; here nothing on the page helps, and `dismissible: false` keeps a stray
+ * click from throwing away a typed password.
+ *
+ * The password is not emailed. Mail works, so this is a choice rather than a
+ * limitation — see the note on createStaff in the backend. The dialog says so
+ * plainly so nobody sits waiting for an invite that was never going to be sent.
+ */
+const creating = ref(false);
+const saving = ref(false);
+const blank = () => ({ name: '', email: '', role: 'worker', password: '' });
+const form = ref(blank());
+
+const canCreate = computed(() =>
+  form.value.name.trim().length >= 2
+  && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.value.email.trim())
+  && form.value.password.length >= MIN_PASSWORD);
+
+function openCreate() {
+  form.value = blank();
+  creating.value = true;
+}
+
+async function submitCreate() {
+  if (!canCreate.value || saving.value) return;
+  saving.value = true;
+  try {
+    const { data } = await client.post('/accounts/staff', {
+      name: form.value.name.trim(),
+      email: form.value.email.trim().toLowerCase(),
+      role: form.value.role,
+      password: form.value.password
+    });
+    // Prepended rather than refetched: the list is sorted by rank, and somebody
+    // who just made an account wants to see it, not hunt for it.
+    staff.value.unshift(data.staff);
+    creating.value = false;
+    toasts.success(`Nalog napravljen: ${data.staff.email}`);
+  } catch (err) {
+    toasts.error(err.response?.data?.message || 'Nalog nije napravljen.');
+  } finally {
+    saving.value = false;
+  }
+}
 
 async function changeRole(member, role) {
   const previous = member.role;
@@ -171,7 +262,7 @@ async function toggleActive(member) {
 
   <div class="mb-4 flex flex-wrap items-center gap-2 border-b border-line pb-3 text-sm">
     <button
-      v-for="option in [{ k: 'users', l: 'Korisnici' }, { k: 'staff', l: 'Uredništvo' }]" :key="option.k"
+      v-for="option in [{ k: 'users', l: 'Korisnici' }, { k: 'admins', l: 'Admini' }, { k: 'mods', l: 'Moderatori' }]" :key="option.k"
       class="rounded px-3 py-1"
       :class="tab === option.k ? 'bg-ink text-on-ink' : 'text-muted hover:text-accent'"
       @click="tab = option.k; page = 1"
@@ -186,6 +277,14 @@ async function toggleActive(member) {
         <option v-for="f in FILTERS" :key="f.key" :value="f.key">{{ f.label }}</option>
       </select>
     </template>
+
+    <button
+      v-else
+      class="ml-auto rounded bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent"
+      @click="openCreate"
+    >
+      <span class="flex items-center gap-1.5"><IconAdd /> Novi nalog</span>
+    </button>
   </div>
 
   <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
@@ -232,7 +331,7 @@ async function toggleActive(member) {
         </td>
         <td class="py-2.5 text-right font-mono text-muted">{{ user.savedCount }}</td>
       </tr>
-      <tr v-if="!users.length"><td colspan="4" class="py-6 text-center text-faint">Nema rezultata.</td></tr>
+      <tr v-if="!users.length"><td colspan="5" class="py-6 text-center text-faint">Nema rezultata.</td></tr>
     </tbody>
   </table>
 
@@ -248,7 +347,7 @@ async function toggleActive(member) {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="member in staff" :key="member._id" class="border-b border-line-soft">
+      <tr v-for="member in visibleStaff" :key="member._id" class="border-b border-line-soft">
         <td class="py-2.5">
           <span class="font-medium">{{ member.name }}</span>
           <span class="ml-2 text-xs text-faint">{{ member.email }}</span>
@@ -289,8 +388,70 @@ async function toggleActive(member) {
           >{{ member.active ? 'Deaktiviraj' : 'Aktiviraj' }}</button>
         </td>
       </tr>
+      <tr v-if="!visibleStaff.length">
+        <td colspan="5" class="py-6 text-center text-faint">
+          {{ tab === 'admins' ? 'Nema nijednog admina.' : 'Nema nijednog moderatora.' }}
+        </td>
+      </tr>
     </tbody>
   </table>
+
+  <!-- The only way a dashboard login is made. Public registration writes to a
+       different collection entirely and can never produce one. -->
+  <AppModal
+    v-model="creating"
+    title="Novi nalog za dashboard"
+    confirm-label="Napravi nalog"
+    :confirm-disabled="!canCreate"
+    :busy="saving"
+    :dismissible="false"
+    @confirm="submitCreate"
+  >
+    <div class="grid gap-4">
+      <label class="block">
+        <span class="text-sm font-medium">Ime i prezime</span>
+        <input
+          v-model="form.name" maxlength="60" placeholder="npr. Amina Hodžić"
+          class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
+        >
+      </label>
+
+      <label class="block">
+        <span class="text-sm font-medium">Email</span>
+        <input
+          v-model="form.email" type="email" autocomplete="off" placeholder="ime@octava.ba"
+          class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
+        >
+        <span class="mt-1 block text-xs text-faint">Ovim se prijavljuje na dashboard.</span>
+      </label>
+
+      <label class="block">
+        <span class="text-sm font-medium">Uloga</span>
+        <select
+          v-model="form.role"
+          class="mt-1 w-full rounded border border-line-strong px-3 py-2 outline-none focus:border-accent"
+        >
+          <option v-for="r in ROLES" :key="r.key" :value="r.key">{{ r.label }}</option>
+        </select>
+        <span class="mt-1 block text-xs text-faint">
+          {{ ROLES.find((r) => r.key === form.role)?.hint }}
+        </span>
+      </label>
+
+      <label class="block">
+        <span class="text-sm font-medium">Početna lozinka</span>
+        <input
+          v-model="form.password" type="text" autocomplete="new-password"
+          class="mt-1 w-full rounded border border-line-strong px-3 py-2 font-mono outline-none focus:border-accent"
+        >
+        <!-- Shown, not masked: you cannot pass on a password you cannot read,
+             and it is going to be typed out to somebody anyway. -->
+        <span class="mt-1 block text-xs" :class="form.password.length >= MIN_PASSWORD ? 'text-faint' : 'text-warn'">
+          Najmanje {{ MIN_PASSWORD }} znakova. Ne šalje se mailom — predaj je lično.
+        </span>
+      </label>
+    </div>
+  </AppModal>
 
   <nav v-if="tab === 'users' && meta && meta.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
     <button class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"

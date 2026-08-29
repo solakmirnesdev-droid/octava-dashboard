@@ -57,6 +57,13 @@ const routes = [
         meta: { minimumRole: 'admin' }
       },
       {
+        // Anybody at the desk, on purpose: a worker who cannot reach an admin
+        // has no way to ask about the thing they are not allowed to do.
+        path: 'chat',
+        name: 'chat',
+        component: () => import('../views/ChatView.vue')
+      },
+      {
         path: 'audit',
         name: 'audit',
         component: () => import('../views/AuditView.vue'),

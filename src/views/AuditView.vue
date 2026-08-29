@@ -32,18 +32,51 @@ const ACTIONS = {
   purge: 'trajno uklonjeno',
   bulk: 'grupna izmjena',
   hide: 'sakriveno',
-  unhide: 'otkriveno'
+  unhide: 'otkriveno',
+  'print.store': 'otisak snimljen',
+  'print.remove': 'otisak uklonjen',
+  'subscription.grant': 'pretplata dodana',
+  'arrangement.create': 'verzija dodana',
+  'arrangement.update': 'verzija izmijenjena',
+  'arrangement.delete': 'verzija obrisana',
+  'arrangement.restore': 'verzija vraćena',
+  'arrangement.primary': 'glavna verzija',
+  'image.upload': 'slika postavljena',
+  'image.remove': 'slika uklonjena'
 };
 
-const ENTITIES = { song: 'pjesma', artist: 'izvođač', staff: 'nalog', review: 'recenzija', genre: 'žanr' };
+const ENTITIES = {
+  song: 'pjesma',
+  artist: 'izvođač',
+  staff: 'nalog',
+  user: 'korisnik',
+  review: 'recenzija',
+  comment: 'komentar',
+  genre: 'žanr',
+  arrangement: 'verzija',
+  report: 'prijava'
+};
 
 /** The tone each verb carries, so a purge does not read like a create. */
 const TONE = {
   create: 'bg-ok-soft text-ok',
   restore: 'bg-ok-soft text-ok',
+  unhide: 'bg-ok-soft text-ok',
+  'print.store': 'bg-ok-soft text-ok',
+  'subscription.grant': 'bg-ok-soft text-ok',
+  'arrangement.create': 'bg-ok-soft text-ok',
+  'arrangement.restore': 'bg-ok-soft text-ok',
+  'arrangement.primary': 'bg-accent-soft text-accent',
+  'image.upload': 'bg-ok-soft text-ok',
+  update: 'bg-raised text-muted',
+  'arrangement.update': 'bg-raised text-muted',
   delete: 'bg-warn-soft text-warn',
+  'print.remove': 'bg-warn-soft text-warn',
+  'arrangement.delete': 'bg-warn-soft text-warn',
+  'image.remove': 'bg-warn-soft text-warn',
+  hide: 'bg-warn-soft text-warn',
   purge: 'bg-danger-soft text-danger',
-  hide: 'bg-warn-soft text-warn'
+  bulk: 'bg-raised text-muted'
 };
 
 const when = (iso) => new Date(iso).toLocaleString('bs');
@@ -56,8 +89,27 @@ function show(value) {
 }
 
 const FIELDS = {
-  title: 'naslov', artist: 'izvođač', status: 'status',
-  genres: 'žanrovi', tags: 'tagovi', youtubeId: 'video'
+  title: 'naslov',
+  artist: 'izvođač',
+  status: 'status',
+  genres: 'žanrovi',
+  tags: 'tagovi',
+  youtubeId: 'video',
+  year: 'godina',
+  originalKey: 'tonalitet',
+  capo: 'kapodaster',
+  difficulty: 'težina',
+  label: 'naziv',
+  content: 'tekst i akordi',
+  name: 'ime',
+  country: 'zemlja',
+  origin: 'porijeklo',
+  website: 'sajt',
+  activeFrom: 'djeluje od',
+  activeTo: 'djeluje do',
+  bio: 'biografija',
+  role: 'uloga',
+  active: 'aktivan'
 };
 
 async function load() {

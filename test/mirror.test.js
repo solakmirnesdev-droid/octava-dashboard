@@ -30,11 +30,29 @@ const MIRRORED = [
   ['fingerprint.js', 'fingerprint.js']
 ];
 
+/*
+ * Files copied from the API rather than from the site.
+ *
+ * AI-NOTE: `fuzzy.js` is what makes a mistyped query still find the song. The
+ * server uses it for /songs/search; this copy filters lists already in memory,
+ * so the two have to agree on what counts as a match — otherwise the same typo
+ * finds a song on one screen and not on another, which reads as one of them
+ * being broken.
+ */
+const MIRRORED_FROM_API = [
+  ['fuzzy.js', 'fuzzy.js']
+];
+
 describe('ogledalo', () => {
-  for (const [mineName, theirsName] of MIRRORED) {
-    test(`${mineName} je identican onom u sajtu`, () => {
+  const pairs = [
+    ...MIRRORED.map(([a, b]) => [a, b, '../../octava-app/app/utils/', 'sajtu']),
+    ...MIRRORED_FROM_API.map(([a, b]) => [a, b, '../../octava-backend/src/utils/', 'backendu'])
+  ];
+
+  for (const [mineName, theirsName, theirDir, whose] of pairs) {
+    test(`${mineName} je identican onom u ${whose}`, () => {
       const mine = join(here, '../src/utils/', mineName);
-      const theirs = join(here, '../../octava-app/app/utils/', theirsName);
+      const theirs = join(here, theirDir, theirsName);
 
       let site;
       try {
@@ -42,13 +60,13 @@ describe('ogledalo', () => {
       } catch {
         // A checkout without the sibling repository should not fail the suite —
         // there is simply nothing to compare against.
-        console.log(`    (octava-app nije prisutan, preskaceno: ${mineName})`);
+        console.log(`    (${whose} nije prisutan, preskaceno: ${mineName})`);
         return;
       }
 
       assert.equal(
         readFileSync(mine, 'utf8'), site,
-        `${mineName} se razisao izmedju dashboarda i sajta — prepisi jedan preko drugog`
+        `${mineName} se razisao izmedju dashboarda i ${whose} — prepisi jedan preko drugog`
       );
     });
   }

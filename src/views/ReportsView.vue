@@ -111,10 +111,17 @@ onMounted(load);
           <span class="rounded bg-raised px-1.5 py-0.5 text-[11px] font-medium">
             {{ KINDS[r.kind] || r.kind }}
           </span>
-          <a
-            v-if="r.song" :href="`${appUrl}/pjesma/${r.song.slug}`" target="_blank" rel="noopener"
-            class="inline-flex items-center gap-1 font-medium hover:text-accent"
-          >{{ r.song.title }} <IconOpen class="text-xs" /></a>
+          <template v-if="r.song">
+            <RouterLink
+              :to="{ name: 'song-edit', params: { id: r.song._id } }"
+              class="font-medium hover:text-accent hover:underline"
+            >{{ r.song.title }}</RouterLink>
+            <a
+              :href="`${appUrl}/pjesma/${r.song.slug}`" target="_blank" rel="noopener"
+              class="inline-flex items-center gap-0.5 text-xs text-muted hover:text-accent"
+              title="Otvori na sajtu"
+            ><IconOpen class="text-xs" /></a>
+          </template>
           <span class="text-faint">{{ r.user?.username }}</span>
           <span class="text-xs text-faint">· {{ when(r.createdAt) }}</span>
         </div>

@@ -151,8 +151,8 @@ function remove() {
 
     <AppModal
       v-model="asking"
-      title="Poslati u korpu?"
-      :description="`${count} ${count === 1 ? 'pjesma ide' : 'pjesama ide'} u korpu. Mogu se vratiti odande u svakom trenutku.`"
+      title="Poslati u kantu?"
+      :description="`${count} ${count === 1 ? 'pjesma ide' : 'pjesama ide'} u kantu. Mogu se vratiti odande u svakom trenutku.`"
       confirm-label="Obriši"
       tone="danger"
       :busy="busy"

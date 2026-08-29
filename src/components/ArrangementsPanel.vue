@@ -124,59 +124,59 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
 </script>
 
 <template>
-  <section class="mb-6">
-    <div class="mb-2 flex items-center justify-between">
-      <h2 class="text-sm font-medium">Verzije ({{ arrangements.length }})</h2>
+  <section class="mb-4">
+    <div class="mb-1.5 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-muted">Verzije ({{ arrangements.length }})</h2>
+        <span class="text-[11px] text-faint">
+          Obrazac iznad uređuje glavnu verziju.
+          <span v-if="atLimit">Dosegnut limit (6).</span>
+        </span>
+      </div>
       <button
-        class="rounded border border-line-strong px-4 py-2 text-sm hover:border-accent disabled:opacity-50"
+        class="rounded border border-line-strong px-2.5 py-1 text-xs hover:border-accent disabled:opacity-50"
         :disabled="adding || atLimit || busy"
         @click="startAdding"
       >
-        <span class="flex items-center gap-1.5"><IconAdd /> Dodaj verziju</span>
+        <span class="flex items-center gap-1"><IconAdd /> Dodaj verziju</span>
       </button>
     </div>
 
-    <p class="mb-3 text-sm text-faint">
-      Obrazac iznad uređuje <strong class="font-medium">glavnu</strong> verziju. Ocjene čitalaca
-      idu na pojedinu verziju, ne na pjesmu.
-      <span v-if="atLimit"> Dosegnut je najveći broj verzija (6).</span>
-    </p>
-
-    <ul class="space-y-2">
+    <ul class="space-y-1.5">
       <li
         v-for="a in arrangements" :key="a._id"
-        class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded border px-4 py-3"
-        :class="a.isPrimary ? 'border-accent/40 bg-accent/[0.03]' : 'border-line-strong'"
+        class="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded border px-3 py-1.5 text-xs"
+        :class="a.isPrimary ? 'border-accent/40 bg-accent/[0.03]' : 'border-line bg-panel/60'"
       >
-        <span class="font-medium">{{ a.label }}</span>
-        <span class="text-sm text-muted">
+        <span class="font-medium text-ink">{{ a.label }}</span>
+        <span class="text-muted">
           {{ a.originalKey }}<template v-if="a.capo"> · kapo {{ a.capo }}</template>
           · {{ labelOf(a.difficulty) }} · {{ scoreOf(a) }}
         </span>
         <span
           v-if="a.isPrimary"
-          class="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent"
+          class="rounded bg-accent-soft px-1.5 py-0.2 text-[9px] uppercase tracking-wide text-accent font-semibold"
         >glavna</span>
 
-        <span class="ml-auto flex gap-2">
+        <span class="ml-auto flex gap-1.5">
           <button
             v-if="!a.isPrimary"
-            class="rounded border border-line-strong px-2.5 py-1 text-sm hover:border-accent disabled:opacity-50"
+            class="rounded border border-line-strong px-2 py-0.5 text-xs hover:border-accent disabled:opacity-50"
             :disabled="busy" @click="makePrimary(a)"
-          ><span class="flex items-center gap-1.5"><IconStar /> Postavi kao glavnu</span></button>
+          ><span class="flex items-center gap-1"><IconStar /> Glavna</span></button>
 
           <button
-            class="rounded border border-line-strong px-2.5 py-1 text-sm hover:border-accent disabled:opacity-50"
+            class="rounded border border-line-strong px-2 py-0.5 text-xs hover:border-danger hover:text-danger disabled:opacity-50"
             :disabled="busy || arrangements.length <= 1"
             :title="arrangements.length <= 1 ? 'Posljednja verzija se ne može obrisati.' : ''"
             @click="confirming = a"
-          ><span class="flex items-center gap-1.5"><IconDelete /> Obriši</span></button>
+          ><span class="flex items-center gap-1"><IconDelete /> Obriši</span></button>
         </span>
       </li>
     </ul>
 
-    <div v-if="adding" class="mt-3 rounded border border-line-strong px-4 py-3">
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div v-if="adding" class="mt-2.5 rounded border border-line-strong bg-panel p-3 text-xs">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label class="block">
           <span class="text-sm font-medium">Naziv verzije</span>
           <input

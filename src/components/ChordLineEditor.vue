@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick, onMounted, useTemplateRef } from 'vue';
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, useTemplateRef } from 'vue';
 import { parseLine, insertChord, replaceChord, removeChord } from '../utils/chordline';
 import { isChord } from '../utils/chordpro';
 
@@ -15,25 +15,27 @@ function sectionLabel(line) {
 const rawLines = computed(() => (props.content || '').split('\n'));
 
 /**
- * Parsed once per content change. Calling parseLine() from the template would
- * re-run it for every line on every render, i.e. on every keystroke.
+ * Parsed once per content change.
  */
 const parsed = computed(() => rawLines.value.map((line) => {
   const entry = { raw: line, section: sectionLabel(line), ...parseLine(line) };
-
-  // A line with chords but no words is an instrumental run. Column positions
-  // are meaningless there — there is nothing to align to — and placing chips
-  // by column makes them collide, since a two-character chord is wider than
-  // the single space that separates it from the next.
   entry.instrumental = Boolean(entry.chords.length) && !entry.plain.trim();
-
   return entry;
 }));
 
+/** All unique chords currently used in the song */
+const allSongChords = computed(() => {
+  const seen = new Set();
+  for (const line of parsed.value) {
+    for (const c of line.chords) {
+      if (c.chord) seen.add(c.chord);
+    }
+  }
+  return [...seen];
+});
+
 /**
- * Column-to-pixel mapping only holds because the text is monospace. The width
- * is measured from a rendered sample rather than hard-coded, so it stays right
- * across fonts, zoom levels and browser text-size settings.
+ * Monospace column-to-pixel measurement.
  */
 const RULER_SAMPLE = '0'.repeat(20);
 const charWidth = ref(8.4);
@@ -46,13 +48,78 @@ function measure() {
 
 onMounted(() => {
   measure();
-  // Re-measure once webfonts land; before that the sample is in a fallback.
   document.fonts?.ready.then(measure);
   window.addEventListener('resize', measure);
 });
 
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measure);
+});
+
 const editing = ref(null);
 const input = useTemplateRef('input');
+
+const draggingChord = ref(null);
+
+function startChordDrag(lineIndex, chordIndex, chord, column, event) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  const laneEl = event.currentTarget.closest('[data-chord-lane]');
+  const laneRect = laneEl ? laneEl.getBoundingClientRect() : null;
+  const { plain } = parseLine(rawLines.value[lineIndex]);
+
+  draggingChord.value = {
+    lineIndex,
+    chordIndex,
+    chord,
+    initialColumn: column,
+    currentColumn: column,
+    startClientX: event.clientX,
+    laneRect,
+    maxColumn: plain.length,
+    hasMoved: false
+  };
+
+  const onPointerMove = (e) => {
+    if (!draggingChord.value) return;
+    const dx = e.clientX - draggingChord.value.startClientX;
+    if (Math.abs(dx) > 3) {
+      draggingChord.value.hasMoved = true;
+    }
+
+    if (draggingChord.value.laneRect) {
+      const relX = e.clientX - draggingChord.value.laneRect.left;
+      const targetCol = Math.max(0, Math.min(
+        draggingChord.value.maxColumn,
+        Math.round(relX / charWidth.value)
+      ));
+      draggingChord.value.currentColumn = targetCol;
+    }
+  };
+
+  const onPointerUp = () => {
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+
+    if (draggingChord.value) {
+      const { lineIndex: lIdx, chordIndex: cIdx, chord: ch, initialColumn: initCol, currentColumn: currCol, hasMoved } = draggingChord.value;
+      if (hasMoved && currCol !== initCol) {
+        const source = rawLines.value[lIdx];
+        const withoutOld = removeChord(source, cIdx);
+        const updated = insertChord(withoutOld, currCol, ch);
+        updateLine(lIdx, updated);
+      } else if (!hasMoved) {
+        openChip(lIdx, cIdx, ch, initCol);
+      }
+      draggingChord.value = null;
+    }
+  };
+
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+}
 
 function updateLine(index, nextLine) {
   const next = [...rawLines.value];
@@ -61,7 +128,6 @@ function updateLine(index, nextLine) {
 }
 
 async function openAt(lineIndex, event) {
-  // Ignore clicks that landed on an existing chip; those open edit instead.
   if (event.target.closest('[data-chip]')) return;
 
   const rect = event.currentTarget.getBoundingClientRect();
@@ -82,6 +148,12 @@ async function openChip(lineIndex, chordIndex, chord, column) {
   input.value?.select();
 }
 
+function selectQuickChord(chord) {
+  if (!editing.value) return;
+  editing.value.value = chord;
+  commit();
+}
+
 function commit() {
   if (!editing.value) return;
   const { lineIndex, column, chordIndex, value } = editing.value;
@@ -89,7 +161,6 @@ function commit() {
   const source = rawLines.value[lineIndex];
 
   if (!chord) {
-    // Clearing the field on an existing chord removes it.
     if (chordIndex !== null) updateLine(lineIndex, removeChord(source, chordIndex));
   } else if (chordIndex !== null) {
     updateLine(lineIndex, replaceChord(source, chordIndex, chord));
@@ -100,95 +171,179 @@ function commit() {
   editing.value = null;
 }
 
-function drop() {
-  if (!editing.value || editing.value.chordIndex === null) {
+function drop(lineIndex, chordIndex) {
+  const lIdx = lineIndex ?? editing.value?.lineIndex;
+  const cIdx = chordIndex ?? editing.value?.chordIndex;
+  if (lIdx === undefined || cIdx === null || cIdx === undefined) {
     editing.value = null;
     return;
   }
-  updateLine(editing.value.lineIndex, removeChord(rawLines.value[editing.value.lineIndex], editing.value.chordIndex));
+  updateLine(lIdx, removeChord(rawLines.value[lIdx], cIdx));
   editing.value = null;
 }
 </script>
 
 <template>
-  <div class="relative font-mono text-[15px] leading-tight">
+  <div class="relative font-mono text-[14px] leading-tight select-text">
     <!-- Off-screen sample used only to measure one character's width. -->
     <span ref="ruler" aria-hidden="true"
           class="pointer-events-none absolute -top-96 left-0 whitespace-pre opacity-0">{{ RULER_SAMPLE }}</span>
 
     <template v-for="(line, i) in parsed" :key="i">
-      <h3 v-if="line.section"
-          class="mt-5 mb-1 font-sans text-xs font-semibold uppercase tracking-widest text-accent">
-        {{ line.section }}
-      </h3>
-
-      <div v-else-if="!line.raw.trim()" class="h-4" />
-
-      <!-- Instrumental run: laid out inline, since there are no words to sit over. -->
-      <div v-else-if="line.instrumental" class="mb-1 flex flex-wrap items-center gap-3">
-        <button
-          v-for="(c, ci) in line.chords" :key="ci"
-          data-chip
-          type="button"
-          class="rounded px-1 text-sm font-semibold text-accent hover:bg-accent/15"
-          @click="openChip(i, ci, c.chord, c.column)"
-        >{{ c.chord }}</button>
+      <!-- Section header -->
+      <div v-if="line.section" class="mt-4 mb-2 flex items-center gap-2">
+        <span class="font-sans text-[11px] font-bold uppercase tracking-wider text-accent rounded bg-accent-soft px-2.5 py-0.5 shadow-xs">
+          {{ line.section }}
+        </span>
+        <div class="h-px flex-1 bg-line-soft" />
       </div>
 
-      <div v-else class="group relative mb-1">
-        <!-- Chord lane. Clicking anywhere along it places a chord at that column. -->
+      <!-- Blank line -->
+      <div v-else-if="!line.raw.trim()" class="h-3" />
+
+      <!-- Instrumental run -->
+      <div v-else-if="line.instrumental" class="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-raised/40 p-2 border border-line-soft/60">
+        <span class="text-[10px] font-sans font-semibold uppercase tracking-wider text-faint">Solo / Akordi:</span>
         <div
-          class="relative h-6 cursor-text rounded-sm hover:bg-accent/5"
-          :title="'Klikni da dodaš akord'"
-          @click="openAt(i, $event)"
+          v-for="(c, ci) in line.chords" :key="ci"
+          data-chip
+          class="group/chip relative inline-flex items-center"
         >
           <button
+            type="button"
+            class="rounded-md bg-accent-soft px-2 py-0.5 text-xs font-bold text-accent border border-accent/30 shadow-xs hover:bg-accent hover:text-on-accent transition-all cursor-grab active:cursor-grabbing"
+            @click="openChip(i, ci, c.chord, c.column)"
+          >
+            {{ c.chord }}
+          </button>
+          <button
+            type="button"
+            class="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-danger text-white text-[10px] opacity-0 group-hover/chip:opacity-100 transition shadow hover:scale-110"
+            @click.stop="drop(i, ci)"
+          >×</button>
+        </div>
+      </div>
+
+      <!-- Regular lyric line with chord lane -->
+      <div v-else class="group relative mb-2.5">
+        <!-- Chord Lane: Clean, subtle track that illuminates on hover or when chords are present -->
+        <div
+          data-chord-lane
+          class="relative h-6 cursor-text rounded transition-all duration-150"
+          :class="[
+            line.chords.length > 0
+              ? 'border-b border-line-soft/60 bg-transparent'
+              : 'border border-dashed border-transparent hover:border-line-strong hover:bg-raised/40 opacity-0 group-hover:opacity-100'
+          ]"
+          @click="openAt(i, $event)"
+        >
+          <!-- Drag target vertical guide line -->
+          <div
+            v-if="draggingChord?.lineIndex === i"
+            class="pointer-events-none absolute top-0 bottom-0 w-0.5 bg-accent shadow-[0_0_8px_var(--color-accent)] z-20"
+            :style="{ left: (draggingChord.currentColumn * charWidth) + 'px' }"
+          />
+
+          <!-- Placed Chord Chips -->
+          <div
             v-for="(c, ci) in line.chords" :key="ci"
             data-chip
-            type="button"
-            class="absolute top-0 rounded px-1 text-sm font-semibold text-accent hover:bg-accent/15"
-            :style="{ left: (c.column * charWidth) + 'px' }"
-            @click.stop="openChip(i, ci, c.chord, c.column)"
-          >{{ c.chord }}</button>
+            class="group/chip absolute top-0"
+            :style="{
+              left: (draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci
+                ? (draggingChord.currentColumn * charWidth)
+                : (c.column * charWidth)) + 'px',
+              zIndex: draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci ? 30 : 10
+            }"
+          >
+            <button
+              type="button"
+              class="relative rounded-md px-1.5 py-0.5 text-xs font-bold font-mono transition-all select-none"
+              :class="[
+                draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci
+                  ? 'bg-accent text-on-accent ring-2 ring-accent shadow-xl scale-110 cursor-grabbing'
+                  : 'bg-panel text-accent border border-accent/40 shadow-xs hover:bg-accent-soft hover:border-accent cursor-grab active:cursor-grabbing'
+              ]"
+              @pointerdown="startChordDrag(i, ci, c.chord, c.column, $event)"
+            >
+              {{ c.chord }}
+            </button>
 
+            <!-- Quick Delete Button on Hover -->
+            <button
+              v-if="!(draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci)"
+              type="button"
+              class="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-danger text-white text-[9px] font-bold opacity-0 group-hover/chip:opacity-100 transition shadow hover:scale-110 z-20"
+              @mousedown.prevent.stop="drop(i, ci)"
+            >×</button>
+          </div>
+
+          <!-- Empty Lane Hover Hint -->
           <span
-            v-if="!line.chords.length"
-            class="pointer-events-none absolute left-0 top-0.5 text-xs text-dim opacity-0 transition group-hover:opacity-100"
-          >klikni za akord</span>
+            v-if="!line.chords.length && !editing"
+            class="pointer-events-none absolute left-2 top-0.5 text-[10px] text-faint flex items-center gap-1 font-sans"
+          >
+            + klikni za akord
+          </span>
         </div>
 
-        <div class="whitespace-pre">{{ line.plain }}</div>
+        <!-- Plain Lyric Text -->
+        <div class="whitespace-pre px-0.5 text-ink leading-relaxed font-mono">{{ line.plain }}</div>
 
-        <!-- Input sits at the clicked column so it reads as an in-place edit. -->
+        <!-- Inline Chord Input Popover with Quick Suggestions Palette -->
         <div
           v-if="editing?.lineIndex === i"
-          class="absolute z-10 -mt-px"
-          :style="{ left: Math.max(0, editing.column * charWidth - 4) + 'px', top: '0px' }"
+          class="absolute z-40 -mt-1"
+          :style="{ left: Math.max(0, editing.column * charWidth - 6) + 'px', top: '-6px' }"
         >
-          <div class="flex items-center gap-1 rounded border border-accent bg-panel px-1 py-0.5 shadow-lg">
-            <input
-              ref="input"
-              v-model="editing.value"
-              class="w-16 bg-transparent text-sm font-semibold text-accent outline-none"
-              placeholder="Am"
-              @keydown.enter.prevent="commit"
-              @keydown.esc.prevent="editing = null"
-              @blur="commit"
-            />
-            <button
-              v-if="editing.chordIndex !== null"
-              type="button"
-              class="text-xs text-dim hover:text-accent"
-              title="Ukloni akord"
-              @mousedown.prevent="drop"
-            >×</button>
+          <div class="flex flex-col gap-1.5 rounded-xl border-2 border-accent bg-panel p-2 shadow-2xl min-w-[10rem]">
+            <div class="flex items-center gap-1.5">
+              <input
+                ref="input"
+                v-model="editing.value"
+                class="w-20 rounded bg-raised px-2 py-1 text-xs font-bold font-mono text-accent outline-none border border-line focus:border-accent"
+                placeholder="Am, G/H"
+                @keydown.enter.prevent="commit"
+                @keydown.esc.prevent="editing = null"
+              />
+              <button
+                type="button"
+                class="rounded bg-accent px-2.5 py-1 text-[11px] font-bold text-on-accent hover:brightness-110 shadow-xs"
+                @mousedown.prevent="commit"
+              >
+                OK
+              </button>
+              <button
+                v-if="editing.chordIndex !== null"
+                type="button"
+                class="rounded border border-danger/40 bg-danger/10 px-2 py-1 text-[11px] text-danger hover:bg-danger hover:text-white transition"
+                title="Ukloni akord"
+                @mousedown.prevent="drop()"
+              >
+                Ukloni
+              </button>
+            </div>
+
+            <!-- Quick Chord Suggestions Palette -->
+            <div v-if="allSongChords.length" class="flex flex-wrap items-center gap-1 pt-1.5 border-t border-line-soft">
+              <span class="text-[9px] text-faint uppercase tracking-wider font-sans block w-full">Predloženi akordi:</span>
+              <button
+                v-for="sc in allSongChords"
+                :key="sc"
+                type="button"
+                class="rounded bg-accent-soft/70 px-1.5 py-0.5 text-[11px] font-bold text-accent hover:bg-accent hover:text-on-accent transition shadow-xs"
+                @mousedown.prevent="selectQuickChord(sc)"
+              >
+                {{ sc }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </template>
 
-    <p v-if="!parsed.some((l) => l.raw.trim())" class="text-sm text-faint">
-      Zalijepi ili unesi tekst pjesme, pa klikni iznad stiha da dodaš akord.
+    <p v-if="!parsed.some((l) => l.raw.trim())" class="text-xs text-faint py-4 text-center">
+      Unesite ili zalijepite tekst pjesme, pa kliknite iznad riječi da dodate akord.
     </p>
   </div>
 </template>

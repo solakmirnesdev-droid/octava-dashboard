@@ -59,6 +59,15 @@ async function markAll() {
 
 const when = (iso) => new Date(iso).toLocaleString('bs');
 
+/** Route to open when clicking the notification card. */
+function targetRoute(n) {
+  if (n.song?._id) return { name: 'song-edit', params: { id: n.song._id } };
+  if (n.type === 'report.created') return { name: 'reports' };
+  if (n.type === 'request.created' || n.type === 'request.voted') return { name: 'requests' };
+  if (n.type === 'user.registered') return { name: 'accounts' };
+  return null;
+}
+
 /**
  * How long ago, in Bosnian.
  *
@@ -105,7 +114,7 @@ onMounted(load);
 <template>
   <section>
     <header class="mb-6 flex flex-wrap items-center gap-3">
-      <h1 class="text-xl font-semibold tracking-tight">Obavještenja</h1>
+      <h1 class="text-xl font-semibold tracking-tight">Inbox</h1>
       <span v-if="store.unread" class="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-on-accent">
         {{ store.unread }} novo
       </span>
@@ -115,7 +124,7 @@ onMounted(load);
           class="rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent hover:text-accent"
           :class="unreadOnly ? 'border-accent bg-accent text-on-accent hover:text-on-accent' : ''"
           @click="toggleFilter"
-        >{{ unreadOnly ? 'Samo nepročitana' : 'Sva' }}</button>
+        >{{ unreadOnly ? 'Samo nepročitano' : 'Sve' }}</button>
 
         <button
           class="flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent hover:text-accent disabled:opacity-40"
@@ -130,7 +139,7 @@ onMounted(load);
     <p v-if="store.loading" class="text-sm text-faint">Učitavanje…</p>
 
     <p v-else-if="!store.items.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
-      {{ unreadOnly ? 'Nema nepročitanih obavještenja.' : 'Još nema obavještenja.' }}
+      {{ unreadOnly ? 'Nema nepročitanih stavki u inboxu.' : 'Inbox je prazan.' }}
     </p>
 
     <!--
@@ -139,64 +148,64 @@ onMounted(load);
       monitor, and the eye has to travel the whole width to find the next one.
       Three columns keep a screenful readable without scrolling.
 
-      The detail was already in the payload and was being thrown away: the API
-      populates `actor.username` and the song's slug and id, and all of it was
-      being flattened into the pre-rendered `summary` string. The actor is now a
-      face, and the song title is a link to its editor — which is where anybody
-      reading a notification about a song is trying to get.
+      The whole card is clickable to direct the user right to the song editor,
+      problem reports, song requests, or user accounts.
     -->
     <ul v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      <li
-        v-for="n in store.items" :key="n._id"
-        class="flex flex-col rounded-lg border bg-panel p-3.5 transition-colors"
-        :class="n.read ? 'border-line' : 'border-accent/40 bg-accent/[0.03]'"
-      >
-        <div class="flex items-center gap-2">
-          <span
-            class="flex size-7 shrink-0 items-center justify-center rounded"
-            :class="TONE_CHIP[kind(n.type).tone]"
-          >
-            <component :is="kind(n.type).icon" class="text-base" />
-          </span>
-
-          <span class="truncate text-sm font-medium">{{ kind(n.type).label }}</span>
-
-          <!-- An unread dot rather than a button: marking one read individually
-               is a click nobody wants; the batch button above covers the need. -->
-          <span
-            v-if="!n.read"
-            class="ml-auto size-2 shrink-0 rounded-full bg-accent"
-            aria-label="nepročitano"
-          />
-        </div>
-
-        <!-- Guarded: the thing a notification points at can be deleted, which is
-             why the summary is stored pre-rendered in the first place. -->
-        <RouterLink
-          v-if="n.song?._id"
-          :to="{ name: 'song-edit', params: { id: n.song._id } }"
-          class="mt-2.5 truncate text-sm font-medium text-accent hover:underline"
-        >{{ n.song.title }}</RouterLink>
-
-        <p v-if="n.summary" class="mt-1 line-clamp-2 text-sm leading-snug text-muted">{{ n.summary }}</p>
-
-        <!-- mt-auto pins this to the bottom, so cards of different heights in a
-             row still line their footers up. -->
-        <div class="mt-auto flex items-center gap-2 pt-3 text-xs text-faint">
-          <span v-if="n.actor?.username" class="flex min-w-0 items-center gap-1.5">
+      <li v-for="n in store.items" :key="n._id">
+        <component
+          :is="targetRoute(n) ? 'RouterLink' : 'div'"
+          :to="targetRoute(n)"
+          class="group flex h-full flex-col rounded-lg border bg-panel p-3.5 transition-all"
+          :class="[
+            n.read ? 'border-line' : 'border-accent/40 bg-accent/[0.03]',
+            targetRoute(n) ? 'hover:border-accent hover:bg-raised/40 cursor-pointer' : ''
+          ]"
+        >
+          <div class="flex items-center gap-2">
             <span
-              class="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
-              :style="avatarStyle(n.actor.username)"
-            >{{ initials(n.actor.username) }}</span>
-            <span class="truncate">{{ n.actor.username }}</span>
-          </span>
+              class="flex size-7 shrink-0 items-center justify-center rounded"
+              :class="TONE_CHIP[kind(n.type).tone]"
+            >
+              <component :is="kind(n.type).icon" class="text-base" />
+            </span>
 
-          <!-- Relative on the card, exact on hover: "prije 2 sata" is what you
-               actually want to know, and it costs a line less than a timestamp. -->
-          <time class="ml-auto shrink-0" :datetime="n.createdAt" :title="when(n.createdAt)">
-            {{ ago(n.createdAt) }}
-          </time>
-        </div>
+            <span class="truncate text-sm font-medium text-ink">{{ kind(n.type).label }}</span>
+
+            <!-- An unread dot rather than a button: marking one read individually
+                 is a click nobody wants; the batch button above covers the need. -->
+            <span
+              v-if="!n.read"
+              class="ml-auto size-2 shrink-0 rounded-full bg-accent"
+              aria-label="nepročitano"
+            />
+          </div>
+
+          <span
+            v-if="n.song?._id"
+            class="mt-2.5 truncate text-sm font-medium text-accent group-hover:underline"
+          >{{ n.song.title }}</span>
+
+          <p v-if="n.summary" class="mt-1 line-clamp-2 text-sm leading-snug text-muted">{{ n.summary }}</p>
+
+          <!-- mt-auto pins this to the bottom, so cards of different heights in a
+               row still line their footers up. -->
+          <div class="mt-auto flex items-center gap-2 pt-3 text-xs text-faint">
+            <span v-if="n.actor?.username" class="flex min-w-0 items-center gap-1.5">
+              <span
+                class="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+                :style="avatarStyle(n.actor.username)"
+              >{{ initials(n.actor.username) }}</span>
+              <span class="truncate">{{ n.actor.username }}</span>
+            </span>
+
+            <!-- Relative on the card, exact on hover: "prije 2 sata" is what you
+                 actually want to know, and it costs a line less than a timestamp. -->
+            <time class="ml-auto shrink-0" :datetime="n.createdAt" :title="when(n.createdAt)">
+              {{ ago(n.createdAt) }}
+            </time>
+          </div>
+        </component>
       </li>
     </ul>
 
