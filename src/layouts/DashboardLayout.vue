@@ -1,4 +1,5 @@
 <script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useChat } from '../composables/useChat';
@@ -6,6 +7,7 @@ import ToastStack from '../components/ToastStack.vue';
 import SessionNotice from '../components/SessionNotice.vue';
 import ChatWidget from '../components/ChatWidget.vue';
 import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import CommandPalette from '../components/CommandPalette.vue';
 import IconStats from '~icons/material-symbols/bar-chart-rounded';
 import IconSongs from '~icons/material-symbols/queue-music-rounded';
 import IconArtists from '~icons/material-symbols/artist-rounded';
@@ -14,17 +16,22 @@ import IconLock from '~icons/material-symbols/lock-outline-rounded';
 import IconAccounts from '~icons/material-symbols/manage-accounts-rounded';
 import IconBell from '~icons/material-symbols/notifications-outline-rounded';
 import IconShield from '~icons/material-symbols/shield-outline-rounded';
-import IconChat from '~icons/material-symbols/forum-outline-rounded';
 import IconBug from '~icons/material-symbols/bug-report-outline-rounded';
 import IconRequest from '~icons/material-symbols/playlist-add-rounded';
 import IconPrint from '~icons/material-symbols/graphic-eq-rounded';
 import IconTrash from '~icons/material-symbols/delete-outline-rounded';
 import IconHistory from '~icons/material-symbols/history-rounded';
+import IconSearch from '~icons/material-symbols/search-rounded';
+import IconMenu from '~icons/material-symbols/menu-rounded';
+import IconClose from '~icons/material-symbols/close-rounded';
 import { roleBadgeClass } from '../utils/avatar';
-import { onMounted, onBeforeUnmount } from 'vue';
 import { useNotificationsStore } from '../stores/notifications';
 
 const auth = useAuthStore();
+const router = useRouter();
+const notifications = useNotificationsStore();
+const showCommandPalette = ref(false);
+const mobileMenuOpen = ref(false);
 
 /**
  * The unread badge on the nav.
@@ -40,8 +47,6 @@ onMounted(() => {
   connectChat();
   loadChatPeers().catch(() => {});
 });
-const router = useRouter();
-const notifications = useNotificationsStore();
 
 // Polled while the dashboard is open and stopped when it is not, so a tab left
 // on a second monitor is not still asking every minute tomorrow morning.
@@ -52,26 +57,41 @@ async function signOut() {
   await auth.logout();
   router.push({ name: 'login' });
 }
+
+function closeMobile() {
+  mobileMenuOpen.value = false;
+}
 </script>
 
 <template>
   <div class="min-h-screen bg-surface text-ink">
-    <header class="border-b border-line bg-panel">
+    <header class="border-b border-line bg-panel sticky top-0 z-30">
       <!-- Top row: Brand & Account tools -->
       <div class="border-b border-line-soft">
-        <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
-          <div class="flex items-center gap-3">
-            <RouterLink :to="{ name: 'stats' }" class="flex items-center gap-2 hover:opacity-90">
+        <div class="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-2.5">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <!-- Mobile Menu Toggle Button -->
+            <button
+              type="button"
+              class="md:hidden flex items-center justify-center p-1.5 rounded-md text-muted hover:bg-raised hover:text-ink focus:outline-none"
+              aria-label="Otvori navigaciju"
+              @click="mobileMenuOpen = !mobileMenuOpen"
+            >
+              <IconMenu v-if="!mobileMenuOpen" class="text-xl" />
+              <IconClose v-else class="text-xl" />
+            </button>
+
+            <RouterLink :to="{ name: 'stats' }" class="flex items-center gap-1.5 sm:gap-2 hover:opacity-90">
               <span class="text-base font-bold tracking-tight text-ink">Octava</span>
               <span class="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent">Dashboard</span>
             </RouterLink>
 
-            <span class="h-4 w-px bg-line" aria-hidden="true" />
+            <span class="hidden sm:inline-block h-4 w-px bg-line" aria-hidden="true" />
 
             <!-- Isolated Inbox on the left -->
             <RouterLink
               :to="{ name: 'notifications' }"
-              class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+              class="hidden sm:flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors"
               :class="notifications.unread
                 ? 'border-accent/40 bg-accent-soft text-accent hover:border-accent'
                 : 'border-line-strong text-muted hover:border-line hover:text-ink'"
@@ -93,7 +113,7 @@ async function signOut() {
             <RouterLink
               v-if="auth.hasRole('worker')"
               :to="{ name: 'requests' }"
-              class="flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-line hover:text-ink"
+              class="hidden md:flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-line hover:text-ink"
               active-class="!border-accent !bg-accent !text-on-accent"
               title="Zahtjevi"
             >
@@ -105,7 +125,7 @@ async function signOut() {
             <RouterLink
               v-if="auth.hasRole('worker')"
               :to="{ name: 'reports' }"
-              class="flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-line hover:text-ink"
+              class="hidden md:flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-line hover:text-ink"
               active-class="!border-accent !bg-accent !text-on-accent"
               title="Prijave"
             >
@@ -114,8 +134,22 @@ async function signOut() {
             </RouterLink>
           </div>
 
-          <div class="flex items-center gap-3.5 text-xs sm:text-sm">
-            <span class="text-muted">
+          <div class="flex items-center gap-2 sm:gap-3.5 text-xs sm:text-sm">
+            <!-- Command Palette Trigger -->
+            <button
+              type="button"
+              class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface/60 px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-ink transition-colors"
+              title="Brza pretraga (Cmd+K)"
+              @click="showCommandPalette = true"
+            >
+              <IconSearch class="text-sm" />
+              <span class="hidden sm:inline">Pretraži…</span>
+              <kbd class="hidden sm:inline-block rounded border border-line px-1 py-0.2 text-[10px] font-mono text-faint bg-raised">
+                ⌘K
+              </kbd>
+            </button>
+
+            <span class="hidden sm:inline text-muted truncate max-w-[140px] md:max-w-[200px]">
               {{ auth.user?.name || auth.user?.email }}
               <span
                 v-if="auth.user?.role"
@@ -145,14 +179,14 @@ async function signOut() {
             <span class="h-3.5 w-px bg-line" aria-hidden="true" />
 
             <button class="flex items-center gap-1 text-muted hover:text-danger" @click="signOut">
-              <IconLogout /> Odjava
+              <IconLogout /> <span class="hidden sm:inline">Odjava</span>
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Bottom row: Navigation tabs -->
-      <div class="mx-auto max-w-6xl px-6">
+      <!-- Bottom row: Navigation tabs for Desktop -->
+      <div class="mx-auto max-w-6xl px-4 sm:px-6 hidden md:block">
         <nav class="flex items-center gap-1 overflow-x-auto py-1 text-sm">
           <RouterLink
             :to="{ name: 'stats' }"
@@ -222,14 +256,133 @@ async function signOut() {
           </RouterLink>
         </nav>
       </div>
+
+      <!-- Mobile Navigation Drawer / Menu -->
+      <div
+        v-if="mobileMenuOpen"
+        class="md:hidden border-t border-line bg-panel px-4 py-3 space-y-1 shadow-lg animate-in slide-in-from-top-2 duration-150"
+      >
+        <div class="pb-2 mb-2 border-b border-line-soft flex items-center justify-between text-xs text-muted">
+          <span>{{ auth.user?.name || auth.user?.email }}</span>
+          <span
+            v-if="auth.user?.role"
+            class="rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider"
+            :class="roleBadgeClass(auth.user.role)"
+          >
+            {{ auth.user.role }}
+          </span>
+        </div>
+
+        <nav class="grid grid-cols-2 gap-1 text-sm">
+          <RouterLink
+            :to="{ name: 'stats' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconStats /> Statistika
+          </RouterLink>
+          <RouterLink
+            :to="{ name: 'songs' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconSongs /> Pjesme
+          </RouterLink>
+          <RouterLink
+            :to="{ name: 'artists' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconArtists /> Izvođači
+          </RouterLink>
+          <RouterLink
+            :to="{ name: 'notifications' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconBell /> Inbox
+            <span v-if="notifications.unread" class="ml-auto rounded-full bg-accent px-1.5 py-0.2 text-[10px] text-on-accent font-bold">
+              {{ notifications.unread }}
+            </span>
+          </RouterLink>
+          <RouterLink
+            v-if="auth.hasRole('worker')"
+            :to="{ name: 'requests' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconRequest /> Zahtjevi
+          </RouterLink>
+          <RouterLink
+            v-if="auth.hasRole('worker')"
+            :to="{ name: 'reports' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconBug /> Prijave
+          </RouterLink>
+          <RouterLink
+            v-if="auth.hasRole('worker')"
+            :to="{ name: 'fingerprints' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconPrint /> Otisci
+          </RouterLink>
+          <RouterLink
+            v-if="auth.hasRole('admin')"
+            :to="{ name: 'moderation' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconShield /> Moderacija
+          </RouterLink>
+          <RouterLink
+            v-if="auth.hasRole('admin')"
+            :to="{ name: 'trash' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconTrash /> Kanta
+          </RouterLink>
+          <RouterLink
+            v-if="auth.hasRole('admin')"
+            :to="{ name: 'audit' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconHistory /> Trag
+          </RouterLink>
+          <RouterLink
+            v-if="auth.isSuperadmin"
+            :to="{ name: 'accounts' }"
+            class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-raised hover:text-ink"
+            active-class="!bg-accent-soft !font-medium !text-accent"
+            @click="closeMobile"
+          >
+            <IconAccounts /> Nalozi
+          </RouterLink>
+        </nav>
+      </div>
     </header>
 
-    <main class="mx-auto max-w-6xl px-6 py-8">
+    <main class="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8">
       <RouterView />
     </main>
 
     <ToastStack />
     <SessionNotice />
     <ChatWidget />
+    <CommandPalette v-model="showCommandPalette" />
   </div>
 </template>

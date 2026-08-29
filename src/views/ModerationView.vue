@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
 import AppModal from '../components/AppModal.vue';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import { initials, avatarColor } from '../utils/avatar';
@@ -219,10 +220,7 @@ onMounted(load);
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="flex flex-col items-center justify-center py-16 text-muted">
-      <div class="size-6 animate-spin rounded-full border-2 border-accent border-t-transparent mb-3" />
-      <span class="text-xs">Učitavam zapise za moderaciju…</span>
-    </div>
+    <SkeletonLoader v-if="loading" type="list" :rows="6" />
 
     <!-- Empty State -->
     <div
@@ -298,146 +296,116 @@ onMounted(load);
                 <span v-if="row.rating" class="text-faint">·</span>
 
                 <!-- Date -->
-                <span class="text-faint">{{ formatDate(row.createdAt) }}</span>
+                <time :datetime="row.createdAt" class="text-faint">
+                  {{ formatDate(row.createdAt) }}
+                </time>
               </div>
             </div>
           </div>
 
-          <!-- Status Pill Badge -->
-          <div class="shrink-0">
+          <!-- Status badge & Actions -->
+          <div class="flex items-center gap-2">
             <span
-              v-if="row.status === 'published'"
-              class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-500"
+              v-if="row.status === 'hidden'"
+              class="rounded-md bg-danger-soft px-2 py-0.5 text-[11px] font-semibold text-danger"
             >
-              <span class="size-1.5 rounded-full bg-emerald-500" />
+              Sakriveno
+            </span>
+            <span
+              v-else-if="row.status === 'removed'"
+              class="rounded-md bg-raised px-2 py-0.5 text-[11px] font-medium text-faint"
+            >
+              Autor obrisao
+            </span>
+            <span
+              v-else
+              class="rounded-md bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok"
+            >
               Objavljeno
             </span>
 
-            <span
-              v-else-if="row.status === 'hidden'"
-              class="inline-flex items-center gap-1 rounded-full bg-danger/10 px-2.5 py-1 text-[11px] font-semibold text-danger border border-danger/20"
-            >
-              <IconHide class="text-xs" />
-              Sakriveno
-            </span>
-
-            <span
-              v-else
-              class="inline-flex items-center gap-1 rounded-full bg-raised px-2.5 py-1 text-[11px] font-medium text-muted"
-            >
-              <IconDelete class="text-xs" />
-              Uklonio autor
-            </span>
-          </div>
-        </div>
-
-        <!-- Comment / Review Text Body -->
-        <div class="mt-3 rounded-lg border border-line-soft bg-raised/40 p-3 text-sm text-ink leading-relaxed">
-          <p class="whitespace-pre-wrap">{{ row.body }}</p>
-        </div>
-
-        <!-- Hidden Reason Banner if Hidden -->
-        <div
-          v-if="row.status === 'hidden' && row.moderationReason"
-          class="mt-2.5 flex items-start gap-2 rounded-lg border border-danger/20 bg-danger/10 p-2.5 text-xs text-danger"
-        >
-          <IconWarning class="text-sm shrink-0 mt-0.5" />
-          <div>
-            <span class="font-semibold">Razlog sakrivanja:</span> {{ row.moderationReason }}
-            <span v-if="row.moderatedBy?.name" class="text-danger/80 block text-[11px] mt-0.5">
-              Moderirao: <strong>{{ row.moderatedBy.name }}</strong>
-            </span>
-          </div>
-        </div>
-
-        <!-- Action Footer -->
-        <div class="mt-3.5 flex items-center justify-between pt-2.5 border-t border-line-soft text-xs">
-          <div class="flex items-center gap-2">
-            <RouterLink
-              v-if="row.song?._id"
-              :to="{ name: 'song-edit', params: { id: row.song._id } }"
-              class="text-muted hover:text-accent font-medium transition"
-            >
-              Otvori pjesmu →
-            </RouterLink>
-          </div>
-
-          <div class="flex items-center gap-2">
+            <!-- Hide / Unhide Action Button -->
             <button
-              v-if="row.status === 'published'"
+              v-if="row.status === 'hidden'"
               type="button"
-              class="flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/5 px-3 py-1.5 font-semibold text-danger hover:bg-danger hover:text-white transition shadow-2xs"
-              @click="askHide(row)"
-            >
-              <IconHide class="text-sm" />
-              <span>Sakrij sadržaj</span>
-            </button>
-
-            <button
-              v-else-if="row.status === 'hidden'"
-              type="button"
-              class="flex items-center gap-1.5 rounded-lg border border-accent bg-accent-soft px-3 py-1.5 font-semibold text-accent hover:bg-accent hover:text-on-accent transition shadow-2xs"
+              class="flex items-center gap-1 rounded-lg border border-line-strong bg-panel px-2.5 py-1 text-xs font-medium text-muted hover:border-accent hover:text-accent transition"
               @click="restore(row)"
             >
               <IconShow class="text-sm" />
-              <span>Vrati objavu</span>
+              <span>Vrati</span>
+            </button>
+            <button
+              v-else-if="row.status === 'published'"
+              type="button"
+              class="flex items-center gap-1 rounded-lg border border-line-strong bg-panel px-2.5 py-1 text-xs font-medium text-muted hover:border-danger hover:text-danger transition"
+              @click="askHide(row)"
+            >
+              <IconHide class="text-sm" />
+              <span>Sakrij</span>
             </button>
           </div>
+        </div>
+
+        <!-- Body text -->
+        <div class="mt-3 rounded-lg bg-surface/70 p-3 text-xs leading-relaxed text-ink border border-line-soft">
+          <p class="whitespace-pre-wrap">{{ row.body || '(Nema teksta)' }}</p>
+        </div>
+
+        <!-- Moderation metadata banner if hidden -->
+        <div
+          v-if="row.status === 'hidden' && row.moderatedAt"
+          class="mt-2.5 flex items-center justify-between rounded-md bg-danger/10 px-3 py-1.5 text-[11px] text-danger"
+        >
+          <div class="flex items-center gap-1.5">
+            <IconWarning class="text-xs shrink-0" />
+            <span>
+              <strong>Razlog:</strong> {{ row.moderationReason || 'Nije specificiran' }}
+            </span>
+          </div>
+          <span class="text-danger/80">
+            Moderirao/la: {{ row.moderatedBy?.name || 'Administrator' }} · {{ formatDate(row.moderatedAt) }}
+          </span>
         </div>
       </article>
     </div>
 
-    <!-- Pagination Navigation -->
-    <nav v-if="pages > 1" class="mt-6 flex items-center justify-center gap-3 text-xs">
+    <!-- Pagination -->
+    <footer v-if="pages > 1" class="flex items-center justify-center gap-2 pt-4 border-t border-line">
       <button
+        v-for="p in pages"
+        :key="p"
         type="button"
-        class="rounded-lg border border-line-strong bg-panel px-3 py-1.5 font-medium disabled:opacity-35 hover:border-accent hover:text-ink transition"
-        :disabled="page <= 1"
-        @click="page--; load()"
+        class="size-8 rounded-lg border text-xs font-medium transition"
+        :class="page === p
+          ? 'border-accent bg-accent text-on-accent shadow-xs'
+          : 'border-line-strong bg-panel text-muted hover:border-accent hover:text-ink'"
+        @click="page = p; load()"
       >
-        ← Prethodna
+        {{ p }}
       </button>
-      <span class="font-mono text-muted">Stranica <strong>{{ page }}</strong> od {{ pages }}</span>
-      <button
-        type="button"
-        class="rounded-lg border border-line-strong bg-panel px-3 py-1.5 font-medium disabled:opacity-35 hover:border-accent hover:text-ink transition"
-        :disabled="page >= pages"
-        @click="page++; load()"
-      >
-        Sljedeća →
-      </button>
-    </nav>
+    </footer>
 
-    <!-- Hide Reason Confirmation Modal -->
+    <!-- Hide Modal Dialog with Presets -->
     <AppModal
       :model-value="Boolean(hiding)"
-      title="Sakrij sadržaj"
-      description="Razlog sakrivanja ostaje zabilježen u sistemu i vidljiv osoblju."
-      confirm-label="Potvrdi i sakrij"
+      title="Sakrij sadržaj iz javnog prikaza"
+      description="Sakriveni komentar ili recenzija više neće biti vidljivi na javnom sajtu. Molimo navedite razlog moderacije:"
+      confirm-label="Sakrij sadržaj"
       tone="danger"
-      :confirm-disabled="!reason.trim()"
-      @update:model-value="(open) => { if (!open) hiding = null; }"
-      @confirm="confirmHide()"
+      @update:model-value="(val) => { if (!val) hiding = null; }"
+      @confirm="confirmHide"
     >
-      <div class="space-y-3 text-xs">
-        <!-- Target content snippet preview -->
-        <div class="rounded-lg border border-line bg-raised/50 p-2.5 text-muted">
-          <span class="font-semibold text-ink block mb-0.5">Sadržaj koji se sakriva:</span>
-          <p class="italic line-clamp-3 text-ink">„{{ hiding?.body }}”</p>
-        </div>
-
-        <!-- Quick Reason Selection Chips -->
+      <div class="mt-3 space-y-3">
+        <!-- Quick Reason Presets -->
         <div>
-          <span class="font-semibold text-muted block mb-1.5">Brzi odabir razloga:</span>
+          <label class="text-xs font-medium text-muted block mb-1.5">Brzi predlošci razloga:</label>
           <div class="flex flex-wrap gap-1.5">
             <button
               v-for="r in PRESET_REASONS"
               :key="r"
               type="button"
-              class="rounded-md border px-2 py-1 text-[11px] transition"
-              :class="reason === r
-                ? 'border-accent bg-accent-soft font-semibold text-accent'
-                : 'border-line-strong bg-panel text-muted hover:border-accent hover:text-ink'"
+              class="rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:border-accent hover:text-ink transition"
+              :class="{ '!border-accent !bg-accent-soft !text-accent font-medium': reason === r }"
               @click="selectPresetReason(r)"
             >
               {{ r }}
@@ -445,14 +413,15 @@ onMounted(load);
           </div>
         </div>
 
+        <!-- Custom Reason Input -->
         <div>
-          <label class="font-semibold text-muted block mb-1">Detaljan razlog:</label>
-          <textarea
+          <label class="text-xs font-medium text-muted block mb-1">Detaljniji razlog / napomena:</label>
+          <input
             v-model="reason"
-            rows="3"
-            maxlength="500"
-            class="w-full rounded-lg border border-line-strong bg-panel p-2.5 text-xs outline-none focus:border-accent"
-            placeholder="Unesite ili dopunite razlog sakrivanja…"
+            type="text"
+            placeholder="Unesite razlog sakrivanja…"
+            class="w-full rounded-lg border border-line-strong bg-panel px-3 py-2 text-xs outline-none focus:border-accent"
+            @keydown.enter="confirmHide"
           />
         </div>
       </div>

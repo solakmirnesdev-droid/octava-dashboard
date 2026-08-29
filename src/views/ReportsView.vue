@@ -1,43 +1,38 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
-import IconDone from '~icons/material-symbols/check-circle-outline-rounded';
-import IconReject from '~icons/material-symbols/cancel-outline-rounded';
-import IconOpen from '~icons/material-symbols/open-in-new-rounded';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
+import IconExternal from '~icons/material-symbols/open-in-new-rounded';
 
 /**
- * Reports that a chart is wrong.
- *
- * Two ways to close one, and they mean different things: resolved is "we
- * changed something", rejected is "we looked and the chart is right". Collapsing
- * them into a single Done would lose the only signal that tells the desk which
- * reporters are worth reading carefully.
+ * Issue reports submitted by readers against songs.
  */
 const toasts = useToasts();
+const appUrl = import.meta.env.VITE_APP_URL || 'https://octava.app';
 
-const KINDS = {
-  chords:    'Pogrešni akordi',
-  lyrics:    'Pogrešan tekst',
-  key:       'Pogrešan tonalitet',
-  duplicate: 'Duplikat',
-  other:     'Ostalo'
-};
-const STATUSES = [
-  { value: 'open',     label: 'Otvorene' },
-  { value: 'resolved', label: 'Riješene' },
-  { value: 'rejected', label: 'Odbijene' }
-];
-
-const status = ref('open');
 const items = ref([]);
-const total = ref(0);
-const open = ref(0);
 const page = ref(1);
 const pages = ref(1);
+const total = ref(0);
+const open = ref(0);
+const status = ref('open');
 const loading = ref(false);
 
-const appUrl = import.meta.env.VITE_APP_URL || 'http://localhost:3000';
+const KINDS = {
+  chords: 'Pogrešan akord',
+  lyrics: 'Netačan tekst',
+  key: 'Pogrešan tonalitet',
+  duplicate: 'Duplikat',
+  other: 'Drugo'
+};
+
+const STATUSES = [
+  { value: 'open', label: 'Otvorene' },
+  { value: 'resolved', label: 'Riješene' },
+  { value: 'rejected', label: 'Odbijene' },
+  { value: 'all', label: 'Sve' }
+];
 
 async function load() {
   loading.value = true;
@@ -45,12 +40,12 @@ async function load() {
     const { data } = await client.get('/reports', {
       params: { status: status.value, page: page.value, limit: 25 }
     });
-    items.value = data.items;
-    total.value = data.total;
-    open.value = data.open;
-    pages.value = data.pages;
-  } catch {
-    toasts.error('Učitavanje nije uspjelo.');
+    items.value = data.reports || [];
+    pages.value = data.pages || 1;
+    total.value = data.total || 0;
+    open.value = data.open || 0;
+  } catch (err) {
+    toasts.error(err.response?.data?.message || 'Učitavanje prijava nije uspjelo.');
   } finally {
     loading.value = false;
   }
@@ -99,7 +94,7 @@ onMounted(load);
 
     <p class="mb-3 text-sm text-faint">{{ total }} prijava</p>
 
-    <p v-if="loading" class="text-sm text-faint">Učitavanje…</p>
+    <SkeletonLoader v-if="loading" type="list" :rows="5" />
 
     <p v-else-if="!items.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
       Nema prijava u ovoj kategoriji.
@@ -118,39 +113,44 @@ onMounted(load);
             >{{ r.song.title }}</RouterLink>
             <a
               :href="`${appUrl}/pjesma/${r.song.slug}`" target="_blank" rel="noopener"
-              class="inline-flex items-center gap-0.5 text-xs text-muted hover:text-accent"
-              title="Otvori na sajtu"
-            ><IconOpen class="text-xs" /></a>
+              class="text-faint hover:text-accent" title="Otvori na sajtu"
+            ><IconExternal class="text-xs inline" /></a>
+            <span class="text-xs text-muted">{{ r.song.artist?.name }}</span>
           </template>
-          <span class="text-faint">{{ r.user?.username }}</span>
-          <span class="text-xs text-faint">· {{ when(r.createdAt) }}</span>
+          <span v-else class="text-faint italic">[obrisana pjesma]</span>
+
+          <span class="ml-auto font-mono text-xs text-faint">{{ when(r.createdAt) }}</span>
         </div>
 
-        <p v-if="r.note" class="mt-2 whitespace-pre-wrap text-sm text-ink">{{ r.note }}</p>
+        <p class="mt-2 text-sm whitespace-pre-wrap">{{ r.body }}</p>
 
-        <p v-if="r.status !== 'open'" class="mt-2 text-xs text-faint">
-          {{ r.status === 'resolved' ? 'Riješio' : 'Odbio' }} {{ r.resolvedBy?.name || '—' }}
-        </p>
+        <div v-if="r.reporter?.email" class="mt-1 text-xs text-faint">
+          Prijavio/la: {{ r.reporter.email }}
+        </div>
 
-        <div v-if="r.status === 'open'" class="mt-3 flex gap-2">
+        <div v-if="r.status === 'open'" class="mt-3 flex gap-2 border-t border-line-soft pt-2 text-xs">
           <button
-            class="flex items-center gap-1.5 rounded border border-line-strong px-2.5 py-1 text-sm hover:border-ok hover:text-ok"
+            class="rounded bg-accent px-2.5 py-1 text-on-accent hover:opacity-90"
             @click="close(r, 'resolved')"
-          ><IconDone /> Riješeno</button>
+          >Riješeno</button>
           <button
-            class="flex items-center gap-1.5 rounded border border-line-strong px-2.5 py-1 text-sm hover:border-line-strong hover:text-body"
+            class="rounded border border-line-strong px-2.5 py-1 text-muted hover:border-danger hover:text-danger"
             @click="close(r, 'rejected')"
-          ><IconReject /> Nije greška</button>
+          >Odbij</button>
+        </div>
+        <div v-else class="mt-2 text-xs text-faint">
+          Status: <span class="font-medium">{{ r.status === 'resolved' ? 'Riješeno' : 'Odbijeno' }}</span>
         </div>
       </li>
     </ul>
 
-    <nav v-if="pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
-      <button class="rounded border border-line-strong px-3 py-1.5 disabled:opacity-35"
-              :disabled="page <= 1" @click="page--; load()">Prethodna</button>
-      <span class="text-faint">{{ page }} / {{ pages }}</span>
-      <button class="rounded border border-line-strong px-3 py-1.5 disabled:opacity-35"
-              :disabled="page >= pages" @click="page++; load()">Sljedeća</button>
+    <nav v-if="pages > 1" class="mt-6 flex justify-center gap-2 text-sm">
+      <button
+        v-for="p in pages" :key="p"
+        class="size-8 rounded border text-xs"
+        :class="page === p ? 'border-accent bg-accent text-on-accent' : 'border-line-strong bg-panel hover:border-accent'"
+        @click="page = p; load()"
+      >{{ p }}</button>
     </nav>
   </section>
 </template>

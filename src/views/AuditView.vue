@@ -2,59 +2,52 @@
 import { ref, onMounted } from 'vue';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import IconPrev from '~icons/material-symbols/chevron-left-rounded';
 import IconNext from '~icons/material-symbols/chevron-right-rounded';
 
-/**
- * Who changed what.
- *
- * AI-NOTE: read-only on purpose, all the way down — there is no endpoint that
- * edits an entry either. A log somebody can quietly correct answers no question
- * worth asking. See AI-NOTES.md §5.
- */
 const toasts = useToasts();
 
 const entries = ref([]);
 const meta = ref(null);
 const loading = ref(true);
-const page = ref(1);
-
 const facets = ref({ actions: [], entities: [] });
+
+const page = ref(1);
 const action = ref('');
 const entity = ref('');
 
-/** Bosnian for the verbs the API stores in English. */
+/**
+ * Human labels for the verbs and nouns stored in the log.
+ */
 const ACTIONS = {
-  create: 'dodano',
-  update: 'izmijenjeno',
-  delete: 'obrisano',
-  restore: 'vraćeno',
-  purge: 'trajno uklonjeno',
-  bulk: 'grupna izmjena',
-  hide: 'sakriveno',
-  unhide: 'otkriveno',
-  'print.store': 'otisak snimljen',
-  'print.remove': 'otisak uklonjen',
-  'subscription.grant': 'pretplata dodana',
-  'arrangement.create': 'verzija dodana',
-  'arrangement.update': 'verzija izmijenjena',
-  'arrangement.delete': 'verzija obrisana',
-  'arrangement.restore': 'verzija vraćena',
-  'arrangement.primary': 'glavna verzija',
-  'image.upload': 'slika postavljena',
-  'image.remove': 'slika uklonjena'
+  create: 'Kreirano',
+  update: 'Izmijenjeno',
+  delete: 'Obrisano',
+  purge: 'Trajno obrisano',
+  restore: 'Vraćeno',
+  bulk: 'Grupna izmjena',
+  hide: 'Sakriveno',
+  unhide: 'Vraćeno u prikaz',
+  'print.store': 'Otisak snimljen',
+  'print.remove': 'Otisak uklonjen',
+  'subscription.grant': 'Dodijeljena pretplata',
+  'arrangement.create': 'Verzija dodana',
+  'arrangement.update': 'Verzija izmijenjena',
+  'arrangement.delete': 'Verzija obrisana',
+  'arrangement.restore': 'Verzija vraćena',
+  'arrangement.primary': 'Postavljena primarna verzija',
+  'image.upload': 'Slika postavljena',
+  'image.remove': 'Slika uklonjena'
 };
 
 const ENTITIES = {
-  song: 'pjesma',
-  artist: 'izvođač',
-  staff: 'nalog',
-  user: 'korisnik',
-  review: 'recenzija',
-  comment: 'komentar',
-  genre: 'žanr',
-  arrangement: 'verzija',
-  report: 'prijava'
+  Song: 'Pjesma',
+  Artist: 'Izvođač',
+  StaffUser: 'Nalog',
+  User: 'Korisnik',
+  Comment: 'Komentar',
+  Review: 'Recenzija'
 };
 
 /** The tone each verb carries, so a purge does not read like a create. */
@@ -183,7 +176,7 @@ function turn(to) {
     </select>
   </div>
 
-  <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
+  <SkeletonLoader v-if="loading" type="list" :rows="8" />
   <p v-else-if="!entries.length" class="text-sm text-muted">Nema zapisa za ovaj filter.</p>
 
   <ul v-else class="space-y-2">
@@ -194,37 +187,39 @@ function turn(to) {
       <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span
           class="rounded px-2 py-0.5 text-xs font-medium"
-          :class="TONE[entry.action] || 'bg-raised text-muted'"
+          :class="TONE[entry.action] || 'bg-raised text-muted' || 'bg-raised text-muted'"
         >{{ ACTIONS[entry.action] || entry.action }}</span>
 
         <span class="text-xs text-faint">{{ ENTITIES[entry.entity] || entry.entity }}</span>
 
-        <span class="font-medium">{{ entry.entityLabel || '—' }}</span>
+        <span class="font-medium text-ink">
+          {{ entry.summary?.title || entry.summary?.name || entry.entityId }}
+        </span>
 
-        <span class="ml-auto font-mono text-xs text-faint">{{ when(entry.createdAt) }}</span>
+        <span v-if="entry.summary?.artist" class="text-xs text-muted">
+          ({{ entry.summary.artist }})
+        </span>
+
+        <span class="ml-auto text-xs text-muted">
+          {{ entry.actor?.name || entry.actor?.email || 'Sistem' }}
+        </span>
+
+        <span class="font-mono text-xs text-faint">
+          {{ when(entry.createdAt) }}
+        </span>
       </div>
 
-      <p class="mt-1 text-xs text-muted">
-        {{ entry.actorName }}
-        <span v-if="entry.actorRole" class="text-faint">· {{ entry.actorRole }}</span>
-      </p>
-
-      <!-- The before/after is the whole reason to keep the log, so it is shown
-           inline rather than behind a click. -->
-      <table v-if="entry.changes?.length" class="mt-2 w-full text-xs">
-        <tbody>
-          <tr v-for="change in entry.changes" :key="change.field" class="align-top">
-            <td class="w-24 py-0.5 pr-2 text-faint">{{ FIELDS[change.field] || change.field }}</td>
-            <td class="py-0.5 pr-2 font-mono text-muted line-through decoration-line-strong">{{ show(change.from) }}</td>
-            <td class="py-0.5 font-mono">{{ show(change.to) }}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <p v-if="entry.meta" class="mt-1.5 font-mono text-xs text-faint">
-        {{ entry.meta.operation }}<span v-if="entry.meta.value">: {{ entry.meta.value }}</span>
-        · promijenjeno {{ entry.meta.touched }} od {{ entry.meta.requested }}
-      </p>
+      <div v-if="entry.changes && Object.keys(entry.changes).length" class="mt-2 text-xs">
+        <div
+          v-for="(diff, key) in entry.changes" :key="key"
+          class="mt-1 font-mono text-muted"
+        >
+          <span class="font-sans font-medium text-ink">{{ FIELDS[key] || key }}:</span>
+          <span class="text-warn line-through ml-1">{{ show(diff.from) }}</span>
+          <span class="mx-1 text-faint">→</span>
+          <span class="text-ok font-medium">{{ show(diff.to) }}</span>
+        </div>
+      </div>
     </li>
   </ul>
 

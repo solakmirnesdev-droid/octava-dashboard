@@ -5,6 +5,7 @@ import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import { useAuthStore } from '../stores/auth';
 import BulkBar from '../components/BulkBar.vue';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import IconAdd from '~icons/material-symbols/add-rounded';
 import IconPublish from '~icons/material-symbols/visibility-rounded';
 import IconUnpublish from '~icons/material-symbols/visibility-off-rounded';
@@ -276,7 +277,7 @@ async function toggleStatus(song) {
     >{{ suggestion }}</button>.
   </p>
 
-  <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
+  <SkeletonLoader v-if="loading" type="table" :rows="8" :cols="6" />
   <p v-else-if="!songs.length" class="text-sm text-muted">Nema pjesama za ovaj filter.</p>
 
   <table v-else class="w-full text-sm">
@@ -359,12 +360,12 @@ async function toggleStatus(song) {
   <nav v-if="meta && meta.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
     <button
       class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
-      :disabled="page <= 1" @click="page--"
+      :disabled="page <= 1" @click="page -= 1"
     ><span class="flex items-center gap-1"><IconPrev /> Prethodna</span></button>
     <span class="text-muted">{{ meta.page }} / {{ meta.pages }}</span>
     <button
       class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
-      :disabled="page >= meta.pages" @click="page++"
+      :disabled="page >= meta.pages" @click="page += 1"
     ><span class="flex items-center gap-1">Sljedeća <IconNext /></span></button>
   </nav>
 </template>

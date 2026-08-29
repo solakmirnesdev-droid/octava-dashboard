@@ -2,6 +2,7 @@
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, useTemplateRef } from 'vue';
 import { parseLine, insertChord, replaceChord, removeChord } from '../utils/chordline';
 import { isChord } from '../utils/chordpro';
+import ChordDiagram from './ChordDiagram.vue';
 
 const props = defineProps({ content: { type: String, default: '' } });
 const emit = defineEmits(['update:content']);
@@ -226,7 +227,7 @@ function drop(lineIndex, chordIndex) {
 
       <!-- Regular lyric line with chord lane -->
       <div v-else class="group relative mb-2.5">
-        <!-- Chord Lane: Clean, subtle track that illuminates on hover or when chords are present -->
+        <!-- Chord Lane: Subtle track that illuminates on hover or when chords are present -->
         <div
           data-chord-lane
           class="relative h-6 cursor-text rounded transition-all duration-150"
@@ -290,13 +291,13 @@ function drop(lineIndex, chordIndex) {
         <!-- Plain Lyric Text -->
         <div class="whitespace-pre px-0.5 text-ink leading-relaxed font-mono">{{ line.plain }}</div>
 
-        <!-- Inline Chord Input Popover with Quick Suggestions Palette -->
+        <!-- Inline Chord Input Popover with Quick Suggestions & Diagram Preview -->
         <div
           v-if="editing?.lineIndex === i"
           class="absolute z-40 -mt-1"
           :style="{ left: Math.max(0, editing.column * charWidth - 6) + 'px', top: '-6px' }"
         >
-          <div class="flex flex-col gap-1.5 rounded-xl border-2 border-accent bg-panel p-2 shadow-2xl min-w-[10rem]">
+          <div class="flex flex-col gap-2 rounded-xl border-2 border-accent bg-panel p-2.5 shadow-2xl min-w-[11rem]">
             <div class="flex items-center gap-1.5">
               <input
                 ref="input"
@@ -322,6 +323,11 @@ function drop(lineIndex, chordIndex) {
               >
                 Ukloni
               </button>
+            </div>
+
+            <!-- Real-time chord fingering preview inside the edit popover -->
+            <div v-if="editing.value.trim()" class="flex justify-center border-t border-line-soft pt-1.5">
+              <ChordDiagram :chord="editing.value.trim()" :width="90" :height="100" />
             </div>
 
             <!-- Quick Chord Suggestions Palette -->

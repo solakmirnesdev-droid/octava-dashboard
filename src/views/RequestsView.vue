@@ -3,59 +3,55 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import IconVote from '~icons/material-symbols/thumb-up-outline-rounded';
-import IconAdd from '~icons/material-symbols/note-add-rounded';
+import IconAdd from '~icons/material-symbols/add-rounded';
 
 /**
- * What readers have asked for, most-wanted first.
- *
- * AI-DECISION: this view exists because the requests were arriving and nobody
- * could see them. The API has accepted them since it was written and gives staff
- * a way to change their status — and there was no page anywhere that listed one.
- * Three were already sitting in the database, unread.
- *
- * AI-NOTE: sorted by votes, which is the whole point. With 1548 songs still
- * carrying placeholder text, the question worth answering is not "which song
- * next" in the abstract but "which song are people actually asking for", and
- * this is the only place that answers it.
+ * Song requests submitted by readers, ranked by reader demand.
  */
-const toasts = useToasts();
-const router = useRouter();
-
 const TABS = [
   { key: 'open', label: 'Otvoreni' },
   { key: 'in_progress', label: 'U radu' },
-  { key: 'done', label: 'Urađeni' },
+  { key: 'done', label: 'Riješeni' },
   { key: 'rejected', label: 'Odbijeni' },
-  { key: '', label: 'Svi' }
+  { key: 'all', label: 'Svi' }
 ];
 
 const STATUS_LABEL = {
-  open: 'otvoren', in_progress: 'u radu', done: 'urađen', rejected: 'odbijen'
+  open: 'Otvoren',
+  in_progress: 'U radu',
+  done: 'Riješen',
+  rejected: 'Odbijen'
 };
+
 const STATUS_CLASS = {
   open: 'bg-accent-soft text-accent',
   in_progress: 'bg-warn-soft text-warn',
   done: 'bg-ok-soft text-ok',
-  rejected: 'bg-raised text-muted'
+  rejected: 'bg-danger-soft text-danger'
 };
 
+const router = useRouter();
+const toasts = useToasts();
+
+const tab = ref('open');
 const requests = ref([]);
 const meta = ref(null);
-const tab = ref('open');
 const loading = ref(true);
 const busyId = ref(null);
 
 async function load() {
   loading.value = true;
   try {
+    const status = tab.value === 'all' ? undefined : tab.value;
     const { data } = await client.get('/requests', {
-      params: { limit: 50, status: tab.value || undefined }
+      params: { status, page: 1, limit: 50 }
     });
     requests.value = data.requests || [];
     meta.value = data.meta;
   } catch (err) {
-    toasts.error(err.response?.data?.message || 'Učitavanje nije uspjelo.');
+    toasts.error(err.response?.data?.message || 'Učitavanje zahtjeva nije uspjelo.');
   } finally {
     loading.value = false;
   }
@@ -80,11 +76,6 @@ async function setStatus(request, status) {
   }
 }
 
-/**
- * Straight from a request into a new song, with the title and artist carried
- * across — the request is the brief, and retyping it is how a letter gets lost
- * between the two screens.
- */
 function startSong(request) {
   router.push({
     name: 'song-new',
@@ -118,7 +109,7 @@ const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs') : '—');
       >{{ t.label }}</button>
     </div>
 
-    <p v-if="loading" class="text-sm text-faint">Učitavanje…</p>
+    <SkeletonLoader v-if="loading" type="list" :rows="6" />
     <p v-else-if="!requests.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
       Nema zahtjeva u ovoj kategoriji.
     </p>
@@ -128,7 +119,7 @@ const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs') : '—');
         v-for="r in requests" :key="r._id"
         class="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel px-4 py-3"
       >
-        <!-- Votes first: it is the reason the list is in this order. -->
+        <!-- Votes first -->
         <span class="flex w-12 shrink-0 flex-col items-center rounded-lg border border-line-soft bg-surface/60 py-1">
           <IconVote class="text-xs text-accent" />
           <span class="font-mono text-sm font-bold">{{ r.votes }}</span>

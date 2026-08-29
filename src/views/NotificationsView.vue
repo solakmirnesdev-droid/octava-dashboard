@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useNotificationsStore } from '../stores/notifications';
 import { useToasts } from '../composables/useToasts';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import IconReview from '~icons/material-symbols/rate-review-outline-rounded';
 import IconComment from '~icons/material-symbols/chat-bubble-outline-rounded';
 import IconRequest from '~icons/material-symbols/add-circle-outline-rounded';
@@ -18,12 +19,6 @@ const page = ref(1);
 
 /**
  * Icon, wording and tone per event.
- *
- * AI-DECISION: `tone` is a status token, not a decorative palette. A bug report
- * is a problem and reads `danger`; a registration is the site growing and reads
- * `ok`; everything else is ordinary traffic and stays on the accent. Colouring
- * all six differently would look livelier and mean nothing — the colour here is
- * meant to be scannable, so it only says "this one is different".
  */
 const KINDS = {
   'review.created':  { icon: IconReview,  label: 'Nova recenzija',   tone: 'accent' },
@@ -68,15 +63,6 @@ function targetRoute(n) {
   return null;
 }
 
-/**
- * How long ago, in Bosnian.
- *
- * AI-TRAP: written out rather than handed to Intl.RelativeTimeFormat. The same
- * failure this project already documented for region names applies here — a
- * build can accept 'bs' and answer in English — and the plural rule is the part
- * that gives it away: 1 sat, 2 sata, 5 sati. Getting "prije 5 sata" onto the
- * page is worse than showing nothing.
- */
 function plural(n, one, few, many) {
   const mod10 = n % 10;
   const mod100 = n % 100;
@@ -136,21 +122,12 @@ onMounted(load);
       </div>
     </header>
 
-    <p v-if="store.loading" class="text-sm text-faint">Učitavanje…</p>
+    <SkeletonLoader v-if="store.loading" type="grid" :rows="6" />
 
     <p v-else-if="!store.items.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
       {{ unreadOnly ? 'Nema nepročitanih stavki u inboxu.' : 'Inbox je prazan.' }}
     </p>
 
-    <!--
-      AI-DECISION: a grid, not a stack. Twenty-five notifications as full-width
-      rows put three short lines against a metre of empty panel on any desk
-      monitor, and the eye has to travel the whole width to find the next one.
-      Three columns keep a screenful readable without scrolling.
-
-      The whole card is clickable to direct the user right to the song editor,
-      problem reports, song requests, or user accounts.
-    -->
     <ul v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       <li v-for="n in store.items" :key="n._id">
         <component
@@ -172,8 +149,6 @@ onMounted(load);
 
             <span class="truncate text-sm font-medium text-ink">{{ kind(n.type).label }}</span>
 
-            <!-- An unread dot rather than a button: marking one read individually
-                 is a click nobody wants; the batch button above covers the need. -->
             <span
               v-if="!n.read"
               class="ml-auto size-2 shrink-0 rounded-full bg-accent"
@@ -181,44 +156,42 @@ onMounted(load);
             />
           </div>
 
-          <span
-            v-if="n.song?._id"
-            class="mt-2.5 truncate text-sm font-medium text-accent group-hover:underline"
-          >{{ n.song.title }}</span>
-
-          <p v-if="n.summary" class="mt-1 line-clamp-2 text-sm leading-snug text-muted">{{ n.summary }}</p>
-
-          <!-- mt-auto pins this to the bottom, so cards of different heights in a
-               row still line their footers up. -->
-          <div class="mt-auto flex items-center gap-2 pt-3 text-xs text-faint">
-            <span v-if="n.actor?.username" class="flex min-w-0 items-center gap-1.5">
-              <span
-                class="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
-                :style="avatarStyle(n.actor.username)"
-              >{{ initials(n.actor.username) }}</span>
-              <span class="truncate">{{ n.actor.username }}</span>
-            </span>
-
-            <!-- Relative on the card, exact on hover: "prije 2 sata" is what you
-                 actually want to know, and it costs a line less than a timestamp. -->
-            <time class="ml-auto shrink-0" :datetime="n.createdAt" :title="when(n.createdAt)">
-              {{ ago(n.createdAt) }}
-            </time>
+          <div v-if="n.user" class="mt-2.5 flex items-center gap-2 text-xs">
+            <div
+              :style="avatarStyle(n.user.name || n.user.email)"
+              class="flex size-5 shrink-0 items-center justify-center rounded text-[10px] font-semibold"
+            >
+              {{ initials(n.user.name || n.user.email) }}
+            </div>
+            <span class="truncate font-medium text-ink">{{ n.user.name || n.user.email }}</span>
           </div>
+
+          <div v-if="n.song" class="mt-1 text-xs">
+            <span class="font-medium text-ink">{{ n.song.title }}</span>
+            <span v-if="n.song.artist" class="text-muted"> · {{ n.song.artist.name || n.song.artist }}</span>
+          </div>
+
+          <p v-if="n.body" class="mt-2 line-clamp-3 text-xs text-muted whitespace-pre-wrap">
+            {{ n.body }}
+          </p>
+
+          <footer class="mt-auto pt-3 text-[11px] text-faint flex items-center justify-between">
+            <time :datetime="n.createdAt" :title="when(n.createdAt)">{{ ago(n.createdAt) }}</time>
+            <span v-if="targetRoute(n)" class="opacity-0 group-hover:opacity-100 text-accent transition-opacity">
+              Otvori →
+            </span>
+          </footer>
         </component>
       </li>
     </ul>
 
-    <nav v-if="store.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
+    <nav v-if="store.meta && store.meta.pages > 1" class="mt-6 flex justify-center gap-2 text-sm">
       <button
-        class="rounded border border-line-strong px-3 py-1.5 disabled:opacity-35"
-        :disabled="page <= 1" @click="page--; load()"
-      >Prethodna</button>
-      <span class="text-faint">{{ page }} / {{ store.pages }}</span>
-      <button
-        class="rounded border border-line-strong px-3 py-1.5 disabled:opacity-35"
-        :disabled="page >= store.pages" @click="page++; load()"
-      >Sljedeća</button>
+        v-for="p in store.meta.pages" :key="p"
+        class="size-8 rounded border text-xs"
+        :class="page === p ? 'border-accent bg-accent text-on-accent' : 'border-line-strong bg-panel hover:border-accent'"
+        @click="page = p; load()"
+      >{{ p }}</button>
     </nav>
   </section>
 </template>

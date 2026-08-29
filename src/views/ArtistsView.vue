@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import AppModal from '../components/AppModal.vue';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import { initials, avatarStyle } from '../utils/avatar';
 import { filterByQuery } from '../utils/textFilter';
 import client from '../api/client';
@@ -71,44 +72,24 @@ const saving = ref(false);
 
 /** null = closed, {} = creating, {…} = editing. */
 const editing = ref(null);
-const form = ref({ name: '', country: '', bio: '', genres: [] });
+const form = ref({ name: '', country: '', origin: '', website: '', activeFrom: '', activeTo: '', bio: '', genres: [] });
 const fileInput = ref(null);
+const bioInput = ref(null);
+const bioPreview = ref(false);
+
 /** Bumped after an upload so the browser refetches instead of using its cache. */
-/**
- * AI-TRAP: this used to be `ref(Date.now())`, stamped onto every portrait URL.
- * A fresh value on every mount meant a fresh URL on every visit, so the day-long
- * Cache-Control that serveImage already sends never once got used — all 125
- * images were refetched every time the screen opened. That alone spent the
- * public rate limit, and the next write (saving an edited artist) came back 429.
- * The key is now the image's own update time: stable across visits, different
- * only when the picture actually changed.
- */
 const cacheKey = (a) => (a.imageUpdatedAt ? Date.parse(a.imageUpdatedAt) : 0);
 
 const apiBase = import.meta.env.VITE_API_URL || '/api';
 
 const visible = computed(() => {
-  // Narrow by the checkboxes first, then rank what is left: the ordering the
-  // filter produces is the answer to the query, and applying it before the
-  // other conditions would only sort rows that are about to be dropped.
   const narrowed = artists.value.filter(
     (a) => (!missingImage.value || !a.hasImage)
         && (!countryFilter.value || a.country === countryFilter.value)
   );
-  // AI-NOTE: was `name.toLowerCase().includes(q)`, which missed both things
-  // people actually type — "zeljko" for Željko, and any typo at all.
   return filterByQuery(narrowed, filter.value, (a) => a.name);
 });
 
-/**
- * Every artist, not the first hundred.
- *
- * AI-TRAP: this used to be a single request with `limit: 100`, which is the
- * API's maximum. With 139 artists in the catalogue that silently hid 39 of them
- * — they could not be edited, given a country, or given a photograph, and
- * nothing on the page said a page two existed. The cap is right; the client has
- * to walk the pages.
- */
 async function fetchAllArtists() {
   const out = [];
   let page = 1;
@@ -137,15 +118,6 @@ async function load() {
   }
 }
 
-/**
- * Brings the editor into view.
- *
- * AI-TRAP: the panel renders at the top of the page, above a grid of 125
- * artists. Pressing "Uredi" on anybody below the fold used to look like a dead
- * button — the form opened two thousand pixels above the viewport and the
- * screen did not move, so editing appeared not to exist at all. Anything that
- * opens this panel has to reveal it.
- */
 const editor = ref(null);
 
 async function revealEditor() {
@@ -154,8 +126,6 @@ async function revealEditor() {
 
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   editor.value.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
-  // Focus the name rather than the panel: it says which artist you are on and
-  // is the field most edits change.
   editor.value.querySelector('input')?.focus({ preventScroll: true });
 }
 
@@ -170,6 +140,78 @@ function resetStagedImage() {
   stagedImageFile.value = null;
   stagedImagePreview.value = null;
   stagedImageRemove.value = false;
+}
+
+function wrapSelection(prefix, suffix, defaultText = 'tekst') {
+  if (!bioInput.value) return;
+  const el = bioInput.value;
+  const start = el.selectionStart ?? 0;
+  const end = el.selectionEnd ?? 0;
+  const current = form.value.bio || '';
+  const selected = current.slice(start, end) || defaultText;
+  const before = current.slice(0, start);
+  const after = current.slice(end);
+
+  form.value.bio = `${before}${prefix}${selected}${suffix}${after}`;
+
+  nextTick(() => {
+    el.focus();
+    el.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
+  });
+}
+
+function insertLinePrefix(prefix) {
+  if (!bioInput.value) return;
+  const el = bioInput.value;
+  const start = el.selectionStart ?? 0;
+  const current = form.value.bio || '';
+  const lineStart = current.lastIndexOf('\n', start - 1) + 1;
+  const before = current.slice(0, lineStart);
+  const after = current.slice(lineStart);
+
+  form.value.bio = `${before}${prefix}${after}`;
+  nextTick(() => {
+    el.focus();
+    el.setSelectionRange(start + prefix.length, start + prefix.length);
+  });
+}
+
+function insertLink() {
+  if (!bioInput.value) return;
+  const el = bioInput.value;
+  const start = el.selectionStart ?? 0;
+  const end = el.selectionEnd ?? 0;
+  const current = form.value.bio || '';
+  const selected = current.slice(start, end) || 'tekst linka';
+  const before = current.slice(0, start);
+  const after = current.slice(end);
+
+  const snippet = `[${selected}](https://)`;
+  form.value.bio = `${before}${snippet}${after}`;
+  nextTick(() => {
+    el.focus();
+    const urlStart = start + snippet.indexOf('https://');
+    el.setSelectionRange(urlStart, urlStart + 8);
+  });
+}
+
+function escapeHtml(str) {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderBioPreview(text) {
+  if (!text) return '';
+  let html = escapeHtml(text);
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  html = html.replace(/~~(.+?)~~/g, '<del class="opacity-75">$1</del>');
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:no-underline">$1</a>');
+  html = html.replace(/^• (.+)$/gm, '<li class="ml-4 list-disc">$1</li>');
+  html = html.replace(/^> (.+)$/gm, '<blockquote class="border-l-2 border-accent/60 pl-2 text-muted italic my-1">$1</blockquote>');
+  return html.replace(/\n/g, '<br>');
 }
 
 function startCreate() {
@@ -210,8 +252,6 @@ async function save() {
       country: form.value.country || null,
       origin: form.value.origin,
       website: form.value.website,
-      // '' clears the year, which is what the API expects; absent would leave
-      // whatever the MusicBrainz pass wrote in place.
       activeFrom: form.value.activeFrom,
       activeTo: form.value.activeTo,
       bio: form.value.bio,
@@ -244,19 +284,6 @@ async function save() {
   }
 }
 
-/**
- * The songs filed under the artist being edited.
- *
- * AI-DECISION: read from the public GET /artists/:slug rather than a new admin
- * endpoint. That route already returns an artist's songs sorted and paged, and
- * it widens to include drafts when the caller is staff — which the dashboard
- * always is. A second endpoint would have been the same query with a different
- * name in front of it.
- *
- * Why it belongs here at all: the panel is where somebody decides to delete an
- * artist, and until now the only thing on the screen saying what that costs was
- * a number in the row behind it.
- */
 const editSongs = ref([]);
 const editSongsTotal = ref(0);
 const editSongsLoading = ref(false);
@@ -272,8 +299,6 @@ async function loadEditSongs(artist) {
     editSongs.value = data.songs || [];
     editSongsTotal.value = data.meta?.total ?? editSongs.value.length;
   } catch {
-    // A panel that cannot list the songs is still a usable panel; the count in
-    // the row behind it is not wrong, only less detailed.
     editSongs.value = [];
   } finally {
     editSongsLoading.value = false;
@@ -282,12 +307,6 @@ async function loadEditSongs(artist) {
 
 const removingArtist = ref(null);
 
-/**
- * AI-TRAP: withSongs is what the API refuses to assume. Without it a deletion
- * of an artist who has songs comes back 409 and nothing happens — which is the
- * right default for anything calling the API, and wrong only here, where the
- * dialog has just said the number out loud and been answered.
- */
 async function removeArtist(a) {
   try {
     const { data } = await client.delete(`/artists/${a._id}`, { params: { withSongs: 1 } });
@@ -299,9 +318,6 @@ async function removeArtist(a) {
   }
 }
 
-/**
- * Validates image locally before staging it for upload upon save.
- */
 async function pickImage(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -339,7 +355,6 @@ function removeImage() {
   stagedImageRemove.value = true;
 }
 
-/** Only the countries the loaded artists actually have. */
 const presentCountries = computed(() => {
   const counts = new Map();
   for (const a of artists.value) {
@@ -354,14 +369,6 @@ const presentCountries = computed(() => {
     .sort((x, y) => y.count - x.count);
 });
 
-/**
- * Paged in the client, like the fingerprints list and for the same reason: the
- * whole set stays in memory so the filter searches all 125 rather than whatever
- * page happened to be on screen, and only the rendering is cut.
- *
- * 48 a page because the grid is two columns at sm and three at lg — a number
- * divisible by both leaves no ragged last row at either width.
- */
 const PER_PAGE = 48;
 const page = ref(1);
 
@@ -372,8 +379,6 @@ const pageArtists = computed(() => {
   return visible.value.slice(start, start + PER_PAGE);
 });
 
-// Narrowing to fewer pages than the one being read would leave an empty grid
-// with no way back to the rows that are still there.
 watch([filter, countryFilter, missingImage], () => { page.value = 1; });
 watch(pageCount, (count) => { if (page.value > count) page.value = count; });
 
@@ -483,10 +488,6 @@ onMounted(load);
           >
         </label>
 
-        <!-- Everything above is shown on the artist's public page and the API
-             has always accepted it; this form simply never sent any of it, so
-             the only values that existed were whatever the MusicBrainz pass
-             happened to write. -->
         <div class="lg:col-span-4">
           <span class="text-sm font-medium">Rubrike</span>
           <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
@@ -498,7 +499,7 @@ onMounted(load);
         </div>
       </div>
 
-      <!-- Biografija with Microsoft Word-like formatting toolbar -->
+      <!-- Biografija with formatting toolbar -->
       <div class="mt-4">
         <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
           <span class="text-sm font-medium">Biografija</span>
@@ -643,7 +644,9 @@ onMounted(load);
           <span class="ml-1 font-mono text-xs font-normal text-faint">{{ editSongsTotal }}</span>
         </h3>
 
-        <p v-if="editSongsLoading" class="text-sm text-faint">Učitavanje…</p>
+        <div v-if="editSongsLoading" class="py-2">
+          <SkeletonLoader type="list" :rows="3" />
+        </div>
         <p v-else-if="!editSongs.length" class="text-sm text-muted">Nema nijedne pjesme.</p>
 
         <ul v-else class="max-h-64 divide-y divide-line-soft overflow-y-auto rounded border border-line">
@@ -676,7 +679,7 @@ onMounted(load);
       </div>
     </div>
 
-    <p v-if="loading" class="text-sm text-faint">Učitavanje…</p>
+    <SkeletonLoader v-if="loading" type="grid" :rows="12" />
 
     <ul v-else class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       <li
@@ -701,9 +704,6 @@ onMounted(load);
           </p>
           <p class="flex items-center gap-2 text-xs text-faint">
             <span>{{ a.songCount }} pjesama</span>
-            <!-- Guarded on ratingCount, not on rating: an artist nobody has
-                 rated scores 0, and printing "0.0" reads as a bad review
-                 rather than as no reviews. -->
             <span v-if="a.ratingCount" class="font-mono">★ {{ a.rating.toFixed(1) }} ({{ a.ratingCount }})</span>
           </p>
         </div>
@@ -754,7 +754,7 @@ onMounted(load);
       :description="removingArtist
         ? (removingArtist.songCount
           ? `Sigurno? Zajedno s izvođačem „${removingArtist.name}“ u kantu ide i svih ${removingArtist.songCount} njegovih pjesama. Sve nestaje sa sajta, i sve se može vratiti zajedno.`
-          : `„${removingArtist.name}“ ide u kantu i nestaje sa sajta. Može se vratiti.`)
+          : `„${removingArtist.name}“ ide u kantu i nestaje sa sajta. Može se vratiti.` )
         : ''"
       confirm-label="Obriši"
       tone="danger"

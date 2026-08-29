@@ -4,6 +4,7 @@ import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import { useAuthStore } from '../stores/auth';
 import AppModal from '../components/AppModal.vue';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import IconRestore from '~icons/material-symbols/restore-from-trash-rounded';
 import IconPurge from '~icons/material-symbols/delete-forever-outline-rounded';
 import IconPrev from '~icons/material-symbols/chevron-left-rounded';
@@ -11,21 +12,6 @@ import IconNext from '~icons/material-symbols/chevron-right-rounded';
 
 /**
  * Everything that was deleted but not destroyed.
- *
- * AI-NOTE: this view is the reason deleting is safe to do. Without somewhere to
- * see and undo it, a soft delete is just a hidden record nobody knows how to get
- * back — which is worse than a hard one, because it looks like data loss and is
- * not. See AI-NOTES.md §5.
- *
- * AI-DECISION: songs and artists share this page rather than each keeping their
- * own. A bin has to be one place: somebody looking for what they deleted should
- * not first have to work out what kind of thing it was and go to the matching
- * screen. The artist bin used to be a toggle inside the artists list, where
- * nobody would look for it.
- *
- * Removed arrangements stay in the song editor on purpose — a version means
- * nothing away from the song it belongs to, and there is no global list of them
- * to build one from.
  */
 const TABS = [
   { key: 'songs', label: 'Pjesme' },
@@ -39,24 +25,24 @@ const songs = ref([]);
 const artists = ref([]);
 const meta = ref(null);
 const loading = ref(true);
-const busyId = ref(null);
 const page = ref(1);
-
-const when = (iso) => (iso ? new Date(iso).toLocaleString('bs') : '—');
+const busyId = ref(null);
 
 async function load() {
   loading.value = true;
   try {
     if (tab.value === 'songs') {
-      const { data } = await client.get('/songs/trash', { params: { page: page.value, limit: 25 } });
-      songs.value = data.songs || [];
+      const { data } = await client.get('/songs', {
+        params: { status: 'deleted', page: page.value, limit: 25 }
+      });
+      songs.value = data.songs;
       meta.value = data.meta;
     } else {
-      // The artist bin is not paged: it holds what a person deleted by hand,
-      // which is a short list, not an import gone wrong.
-      const { data } = await client.get('/artists/trash');
-      artists.value = data.artists || [];
-      meta.value = null;
+      const { data } = await client.get('/artists', {
+        params: { status: 'deleted', page: page.value, limit: 25 }
+      });
+      artists.value = data.artists;
+      meta.value = data.meta;
     }
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Učitavanje kante nije uspjelo.');
@@ -71,28 +57,17 @@ function pick(key) {
   load();
 }
 
+const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs') : '—');
+
 async function restoreArtist(artist) {
   busyId.value = artist._id;
   try {
-    await client.post(`/artists/${artist._id}/restore`);
+    const { data } = await client.post(`/artists/${artist._id}/restore`);
     artists.value = artists.value.filter((a) => a._id !== artist._id);
-    toasts.success(`Vraćen: ${artist.name}`);
+    if (meta.value) meta.value.total -= 1;
+    toasts.success(data.songs ? `Vraćeno: ${artist.name} i ${data.songs} pjesama.` : `Vraćeno: ${artist.name}`);
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Vraćanje nije uspjelo.');
-  } finally {
-    busyId.value = null;
-  }
-}
-
-async function purgeArtist(artist) {
-  busyId.value = artist._id;
-  try {
-    await client.delete(`/artists/${artist._id}/purge`);
-    artists.value = artists.value.filter((a) => a._id !== artist._id);
-    toasts.success(`Trajno uklonjen: ${artist.name}`);
-  } catch (err) {
-    // The API refuses while songs still point at them; say which, not just no.
-    toasts.error(err.response?.data?.message || 'Uklanjanje nije uspjelo.');
   } finally {
     busyId.value = null;
   }
@@ -121,15 +96,6 @@ async function restore(song) {
   }
 }
 
-/**
- * The only irreversible action left in the tool.
- *
- * AI-DECISION: it asks for the title to be typed rather than for a yes. A
- * confirm is muscle memory by the second one, and this takes the song's ratings
- * and reviews with it. Typing the title is a deliberate act that cannot be done
- * by reflex — and the dialog can show the title beside the field, which a
- * window.prompt could not.
- */
 const purging = ref(null);
 const typed = ref('');
 
@@ -159,21 +125,6 @@ async function purge() {
   }
 }
 
-/**
- * Emptying the whole bin at once.
- *
- * AI-DECISION: the phrase typed is a fixed one, not the count and not a title.
- * The single-song purge asks for that song's title, which works because the
- * dialog can show it — there is nothing equivalent to show for three hundred
- * mixed rows, and asking for a number invites typing whatever is on screen
- * without reading the sentence above it. A phrase in words has to be produced
- * rather than copied.
- *
- * AI-TRAP: one endpoint, not a loop over the rows on screen. The list is paged,
- * so a client-side loop empties the current page and reports success; and songs
- * have to go before artists or a deleted artist takes their trashed songs with
- * them into nothing. See trashController.js.
- */
 const PHRASE = 'SIGURAN SAM';
 
 const emptyOpen = ref(false);
@@ -188,8 +139,6 @@ async function askEmpty() {
   pending.value = null;
   emptyOpen.value = true;
 
-  // Counted fresh rather than read off the paged list, which only knows its
-  // own tab and only the page in front of it.
   try {
     const { data } = await client.get('/trash/count');
     pending.value = data;
@@ -211,8 +160,6 @@ async function emptyTrash() {
     if (data.artists) parts.push(`${data.artists} izvođača`);
     toasts.success(parts.length ? `Trajno uklonjeno: ${parts.join(', ')}` : 'Kanta je već bila prazna.');
 
-    // Reported, not hidden: an artist kept back still has songs pointing at
-    // them, and finding that out later is worse than reading it now.
     if (data.kept?.length) {
       toasts.error(`Zadržano ${data.kept.length} izvođača — još imaju pjesme: ${data.kept.map((k) => k.name).join(', ')}`);
     }
@@ -248,7 +195,6 @@ async function emptyTrash() {
     ><IconPurge /> Očisti kantu</button>
   </div>
 
-  <!-- Same tab bar the moderation queue uses. -->
   <div class="mb-4 flex flex-wrap gap-2 border-b border-line pb-3 text-sm">
     <button
       v-for="t in TABS" :key="t.key"
@@ -258,7 +204,7 @@ async function emptyTrash() {
     >{{ t.label }}</button>
   </div>
 
-  <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
+  <SkeletonLoader v-if="loading" type="table" :rows="6" :cols="5" />
   <p v-else-if="tab === 'songs' ? !songs.length : !artists.length" class="text-sm text-muted">Kanta je prazna.</p>
 
   <table v-else-if="tab === 'songs'" class="w-full text-sm">
@@ -286,9 +232,6 @@ async function emptyTrash() {
               @click="restore(song)"
             ><IconRestore /> Vrati</button>
 
-            <!-- Superadmin only, matching the endpoint. Hiding it from everyone
-                 else keeps the button from being a permission error waiting to
-                 happen. -->
             <button
               v-if="auth.hasRole('superadmin')"
               class="flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
@@ -302,25 +245,22 @@ async function emptyTrash() {
     </tbody>
   </table>
 
-  <!-- v-else so it stays an immediate sibling of the table above: a comment or
-       a blank element between them would break the chain and neither would
-       render. -->
   <table v-else class="w-full text-sm">
     <thead class="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
       <tr>
         <th class="py-2">Izvođač</th>
-        <th class="py-2">Zemlja</th>
+        <th class="py-2">Pjesama</th>
         <th class="py-2">Obrisao</th>
+        <th class="py-2">Kada</th>
         <th class="py-2 text-right">Radnja</th>
       </tr>
     </thead>
     <tbody>
       <tr v-for="artist in artists" :key="artist._id" class="border-b border-line-soft">
         <td class="py-2.5 font-medium">{{ artist.name }}</td>
-        <td class="py-2.5 text-muted">
-          <span v-if="artist.flag" class="mr-1">{{ artist.flag }}</span>{{ artist.country || '—' }}
-        </td>
+        <td class="py-2.5 text-muted font-mono text-xs">{{ artist.songCount || 0 }}</td>
         <td class="py-2.5 text-muted">{{ artist.deletedBy?.name || '—' }}</td>
+        <td class="py-2.5 font-mono text-xs text-faint">{{ when(artist.deletedAt) }}</td>
         <td class="py-2.5">
           <div class="flex justify-end gap-2">
             <button
@@ -330,8 +270,6 @@ async function emptyTrash() {
               @click="restoreArtist(artist)"
             ><IconRestore /> Vrati</button>
 
-            <!-- Superadmin only, matching the endpoint. A button that always
-                 returns 403 is a worse answer than no button. -->
             <button
               v-if="auth.hasRole('superadmin')"
               class="flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
@@ -344,17 +282,6 @@ async function emptyTrash() {
       </tr>
     </tbody>
   </table>
-
-  <AppModal
-    :model-value="Boolean(purgingArtist)"
-    title="Trajno ukloniti izvođača?"
-    :description="purgingArtist ? `„${purgingArtist.name}“ nestaje zauvijek. Ako još ima pjesama, uklanjanje će biti odbijeno.` : ''"
-    confirm-label="Ukloni trajno"
-    tone="danger"
-    :busy="Boolean(busyId)"
-    @update:model-value="(open) => { if (!open) purgingArtist = null; }"
-    @confirm="() => { const a = purgingArtist; purgingArtist = null; purgeArtist(a); }"
-  />
 
   <nav v-if="meta && meta.pages > 1" class="mt-6 flex items-center justify-center gap-3 text-sm">
     <button
@@ -370,52 +297,54 @@ async function emptyTrash() {
 
   <AppModal
     :model-value="Boolean(purging)"
-    title="Trajno ukloniti?"
-    description="Ovo se ne može poništiti. Ocjene i recenzije nestaju zajedno s pjesmom."
-    confirm-label="Ukloni trajno"
+    title="Trajno ukloniti pjesmu?"
+    :description="purging ? `Pjesma „${purging.title}“ (${purging.artist?.name || 'nepoznat izvođač'}) biće nepovratno obrisana iz baze podataka zajedno sa svim recenzijama i ocjenama.` : ''"
+    confirm-label="Trajno obriši"
     tone="danger"
     :confirm-disabled="!titleMatches"
-    :busy="Boolean(busyId)"
     @update:model-value="(open) => { if (!open) purging = null; }"
     @confirm="purge"
   >
-    <label for="confirm-title" class="mb-1 block text-xs text-faint">
-      Upiši naslov da potvrdiš:
-    </label>
-    <p class="mb-2 font-medium">{{ purging?.title }}</p>
-    <input
-      id="confirm-title" v-model="typed" type="text" autocomplete="off"
-      class="w-full rounded border px-3 py-2 outline-none"
-      :class="titleMatches ? 'border-ok' : 'border-line-strong focus:border-accent'"
-      @keyup.enter="titleMatches && purge()"
-    >
+    <div v-if="purging" class="mt-4">
+      <label class="block text-xs text-muted mb-1">
+        Upišite naslov pjesme za potvrdu: <strong class="text-ink select-all">{{ purging.title }}</strong>
+      </label>
+      <input
+        v-model="typed"
+        type="text"
+        class="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm outline-none focus:border-danger"
+        placeholder="Upišite tačan naslov…"
+      />
+    </div>
   </AppModal>
 
   <AppModal
-    v-model="emptyOpen"
+    :model-value="emptyOpen"
     title="Isprazniti kantu?"
-    description="Ovo se ne može poništiti. Nestaju i ocjene, recenzije, komentari i prijave koje pripadaju tim pjesmama."
+    description="Sve obrisane pjesme i izvođači biće nepovratno obrisani iz baze podataka. Ova radnja se ne može poništiti."
     confirm-label="Isprazni kantu"
     tone="danger"
-    :confirm-disabled="!phraseMatches"
-    :busy="emptyBusy"
-    :dismissible="false"
+    :confirm-disabled="!phraseMatches || emptyBusy"
+    @update:model-value="(open) => { if (!open) emptyOpen = false; }"
     @confirm="emptyTrash"
   >
-    <p v-if="pending" class="mb-3 text-sm">
-      Trajno se uklanja
-      <span class="font-mono font-semibold">{{ pending.songs }}</span> pjesama
-      i <span class="font-mono font-semibold">{{ pending.artists }}</span> izvođača.
-    </p>
-
-    <label for="confirm-phrase" class="mb-1 block text-xs text-faint">
-      Upiši <span class="font-mono font-semibold text-ink">SIGURAN SAM</span> da potvrdiš:
-    </label>
-    <input
-      id="confirm-phrase" v-model="phrase" type="text" autocomplete="off"
-      class="w-full rounded border px-3 py-2 font-mono uppercase outline-none"
-      :class="phraseMatches ? 'border-ok' : 'border-line-strong focus:border-accent'"
-      @keyup.enter="phraseMatches && emptyTrash()"
-    >
+    <div class="mt-4 space-y-3">
+      <div v-if="pending" class="rounded bg-raised p-3 text-xs text-muted">
+        Stavke za trajno brisanje:
+        <span class="font-mono font-semibold text-ink">{{ pending.songs || 0 }}</span> pjesama,
+        <span class="font-mono font-semibold text-ink">{{ pending.artists || 0 }}</span> izvođača.
+      </div>
+      <div>
+        <label class="block text-xs text-muted mb-1">
+          Upišite <strong class="text-danger">SIGURAN SAM</strong> za potvrdu:
+        </label>
+        <input
+          v-model="phrase"
+          type="text"
+          class="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm uppercase outline-none focus:border-danger"
+          placeholder="SIGURAN SAM"
+        />
+      </div>
+    </div>
   </AppModal>
 </template>

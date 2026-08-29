@@ -4,6 +4,7 @@ import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import { useAuthStore } from '../stores/auth';
 import AppModal from '../components/AppModal.vue';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import { fingerprint, packHashes, SAMPLE_RATE } from '../utils/fingerprint';
 import { filterByQuery } from '../utils/textFilter';
 import IconUpload from '~icons/material-symbols/upload-rounded';
@@ -16,18 +17,6 @@ import IconWarn from '~icons/material-symbols/warning-outline-rounded';
 
 /**
  * Acoustic fingerprints, one per song.
- *
- * AI-DECISION: this view exists because the recognise feature does not work
- * without it. The API could store, list and delete prints from the day it was
- * written, and nothing could put one in — so "Prepoznaj" on the site had an
- * empty index to search and answered "not found" to every song in the
- * catalogue. A capability nobody can reach is the same as one nobody built.
- *
- * AI-NOTE: the audio never leaves the browser. A file is decoded here, reduced
- * to a fingerprint here, and only the hashes are sent — a few kilobytes of
- * numbers that cannot be turned back into sound. That is deliberate: this tool
- * has no licence to hold recordings, and storing them would be the one thing in
- * this project that genuinely could not be defended.
  */
 const toasts = useToasts();
 const auth = useAuthStore();
@@ -47,22 +36,9 @@ const rows = computed(() => {
     .map((s) => ({ song: s, print: printBySong.value.get(String(s._id)) || null }))
     .filter((r) => (showMissing.value ? true : Boolean(r.print)));
 
-  // Title and performer together, so either one finds the row — and through the
-  // same matcher the API uses, so a typo that finds a song under Pjesme finds it
-  // here too rather than looking like one of the two screens is broken.
   return filterByQuery(paired, filter.value, (r) => `${r.song.title} ${r.song.artist?.name || ''}`);
 });
 
-/**
- * Paged here rather than by the API.
- *
- * AI-DECISION: the whole catalogue is already in memory — that is what lets the
- * filter be typo-tolerant across all 1569 songs rather than across one page. Ask
- * the server for a page and the filter could only ever search what it had been
- * sent. So the list stays whole and only the rendering is cut, which also fixes
- * what this was really costing: 1569 rows with two buttons each, built on every
- * keystroke.
- */
 const PER_PAGE = 50;
 const page = ref(1);
 
@@ -73,8 +49,6 @@ const pageRows = computed(() => {
   return rows.value.slice(start, start + PER_PAGE);
 });
 
-// Filtering to fewer pages than the one being read would otherwise leave an
-// empty table with no way back.
 watch([filter, showMissing], () => { page.value = 1; });
 watch(pageCount, (count) => { if (page.value > count) page.value = count; });
 
@@ -86,10 +60,6 @@ function turn(to) {
 const withPrint = computed(() => rows.value.filter((r) => r.print).length);
 const stale = computed(() => prints.value.filter((p) => p.stale).length);
 
-/**
- * Walks every page of published songs, so the entire catalogue is searchable
- * rather than only the first 100 songs.
- */
 async function fetchAllSongs() {
   const out = [];
   let page = 1;
@@ -121,188 +91,188 @@ async function load() {
     loading.value = false;
   }
 }
-onMounted(load);
-
-/**
- * Decodes anything the browser can play, at the one rate the fingerprint knows.
- *
- * AI-TRAP: copied from the site's useRecognizer, resampling and all. An
- * OfflineAudioContext asked for 8000Hz does a proper band-limited conversion;
- * taking every sixth sample by hand aliases everything above 4kHz down into the
- * range the constellation reads, and the print that comes out matches nothing —
- * silently, because a wrong number raises no error.
- */
-async function decodeTo8k(arrayBuffer) {
-  const Ctx = window.AudioContext || window.webkitAudioContext;
-  const decoder = new Ctx();
-  try {
-    const decoded = await decoder.decodeAudioData(arrayBuffer);
-    const frames = Math.ceil(decoded.duration * SAMPLE_RATE);
-    const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    const offline = new Offline(1, frames, SAMPLE_RATE);
-    const source = offline.createBufferSource();
-    source.buffer = decoded;
-    source.connect(offline.destination);
-    source.start();
-    const rendered = await offline.startRendering();
-    return { samples: rendered.getChannelData(0), seconds: decoded.duration };
-  } finally {
-    decoder.close?.();
-  }
-}
 
 const fileInput = ref(null);
-const pending = ref(null);
+const targetSong = ref(null);
 
 function pick(song) {
-  pending.value = song;
+  targetSong.value = song;
   fileInput.value.value = '';
   fileInput.value.click();
 }
 
-async function onFile(event) {
+async function onFileSelected(event) {
   const file = event.target.files?.[0];
-  const song = pending.value;
+  const song = targetSong.value;
   if (!file || !song) return;
-  await ingest(song, await file.arrayBuffer());
-  pending.value = null;
-}
 
-/**
- * Capturing the audio of a browser tab.
- *
- * AI-DECISION: this exists because sourcing an audio file for each of 1569
- * songs is the thing actually standing between the catalogue and working
- * recognition. Asking the server to fetch the audio from a URL was rejected:
- * that means downloading and storing copies of recordings we have no right to,
- * whatever the fingerprint is later used for. Capture keeps the existing shape
- * instead — the audio is decoded in this tab, only hashes are sent, and nothing
- * is written to disk at any point.
- *
- * AI-TRAP: `video: true` is required even though the video track is discarded
- * immediately. Chrome will not offer the tab picker for an audio-only request,
- * so asking for audio alone silently leaves the operator with no tab to choose.
- */
-const capturing = ref(null);
-const capturedSeconds = ref(0);
-let recorder = null;
-let captureTimer = null;
-
-async function startCapture(song) {
-  if (capturing.value || busyId.value) return;
-
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-    });
-  } catch {
-    // Dismissing the picker is a decision, not a failure worth a red toast.
-    return;
-  }
-
-  if (!stream.getAudioTracks().length) {
-    stream.getTracks().forEach((t) => t.stop());
-    toasts.error('Ta kartica nije podijelila zvuk.', {
-      detail: 'U prozoru za dijeljenje uključi „Podijeli zvuk kartice".'
-    });
-    return;
-  }
-
-  // The picture is never looked at; keeping it would record the screen for no
-  // reason and cost memory for the length of a whole song.
-  stream.getVideoTracks().forEach((t) => t.stop());
-
-  const audioOnly = new MediaStream(stream.getAudioTracks());
-  const chunks = [];
-  recorder = new MediaRecorder(audioOnly);
-  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-
-  recorder.onstop = async () => {
-    clearInterval(captureTimer);
-    audioOnly.getTracks().forEach((t) => t.stop());
-    const blob = new Blob(chunks, { type: recorder.mimeType });
-    capturing.value = null;
-    recorder = null;
-    if (blob.size) await ingest(song, await blob.arrayBuffer());
-  };
-
-  capturedSeconds.value = 0;
-  captureTimer = setInterval(() => { capturedSeconds.value += 1; }, 1000);
-  capturing.value = song._id;
-  recorder.start();
-
-  // Stopping the share from Chrome's own bar has to end the recording too, or
-  // the row sits on "Zaustavi" over a stream that no longer exists.
-  stream.getAudioTracks()[0].addEventListener('ended', stopCapture);
-}
-
-function stopCapture() {
-  if (recorder?.state === 'recording') recorder.stop();
-}
-
-const clock = (total) => `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-
-/** The one path from decoded audio to a stored print, whatever produced it. */
-async function ingest(song, arrayBuffer) {
   busyId.value = song._id;
   try {
-    const { samples, seconds } = await decodeTo8k(arrayBuffer);
-    const pairs = fingerprint(samples);
-    if (!pairs.length) {
-      toasts.error('Iz ovog snimka nije izašao nijedan otisak.', { detail: 'Provjeri da nije tišina.' });
-      return;
-    }
+    const buf = await file.arrayBuffer();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+    const audio = await ctx.decodeAudioData(buf);
+    await ctx.close();
 
-    const bytes = packHashes(pairs);
-    await client.put(`/recognize/${song._id}?seconds=${Math.round(seconds)}`, bytes, {
-      headers: { 'Content-Type': 'application/octet-stream' }
+    const pcm = audio.getChannelData(0);
+    const { hashes, seconds } = fingerprint(pcm, audio.sampleRate);
+    if (!hashes.length) throw new Error('Snimak je prekratak ili previše tih za prepoznavanje.');
+
+    await client.post('/recognize', {
+      songId: song._id,
+      hashes: packHashes(hashes),
+      seconds
     });
 
-    toasts.success(`Otisak snimljen: ${song.title}`, {
-      detail: `${pairs.length} parova iz ${Math.round(seconds)} s`
+    toasts.success(`Snimljen otisak: ${song.title}`, {
+      detail: `${hashes.length} parova tačaka (${seconds.toFixed(1)} s)`
     });
     await load();
   } catch (err) {
-    toasts.error(err.response?.data?.message || 'Otisak nije snimljen.', {
-      detail: err.name === 'EncodingError' ? 'Browser ne može dekodirati ovaj format.' : undefined
-    });
+    toasts.error(err.response?.data?.message || err.message || 'Obrada zvuka nije uspjela.');
   } finally {
     busyId.value = null;
+    targetSong.value = null;
+  }
+}
+
+const capturing = ref(null);
+const capturedSeconds = ref(0);
+let mediaStream = null;
+let mediaRecorder = null;
+let captureChunks = [];
+let captureTimer = null;
+
+async function startCapture(song) {
+  try {
+    mediaStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+
+    const audioTrack = mediaStream.getAudioTracks()[0];
+    if (!audioTrack) {
+      mediaStream.getTracks().forEach((t) => t.stop());
+      toasts.error('Niste označili „Share audio“ u dijalogu. Zvuk iz kartice je obavezan.');
+      return;
+    }
+
+    capturing.value = song._id;
+    capturedSeconds.value = 0;
+    captureChunks = [];
+
+    captureTimer = setInterval(() => {
+      capturedSeconds.value += 1;
+      if (capturedSeconds.value >= 180) stopCapture();
+    }, 1000);
+
+    const audioOnlyStream = new MediaStream([audioTrack]);
+    mediaRecorder = new MediaRecorder(audioOnlyStream);
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) captureChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => processCapturedAudio(song);
+    audioTrack.onended = () => stopCapture();
+
+    mediaRecorder.start();
+  } catch (err) {
+    if (err.name !== 'NotAllowedError') {
+      toasts.error('Snimanje zvuka iz kartice nije podržano ili nije uspjelo.');
+    }
+    stopCaptureCleanup();
+  }
+}
+
+function stopCapture() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  stopCaptureCleanup();
+}
+
+function stopCaptureCleanup() {
+  if (captureTimer) clearInterval(captureTimer);
+  captureTimer = null;
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream = null;
+  }
+}
+
+async function processCapturedAudio(song) {
+  const songId = capturing.value || song?._id;
+  capturing.value = null;
+  if (!captureChunks.length || !songId) return;
+
+  busyId.value = songId;
+  try {
+    const blob = new Blob(captureChunks, { type: 'audio/webm' });
+    const buf = await blob.arrayBuffer();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+    const audio = await ctx.decodeAudioData(buf);
+    await ctx.close();
+
+    const pcm = audio.getChannelData(0);
+    const { hashes, seconds } = fingerprint(pcm, audio.sampleRate);
+    if (!hashes.length) throw new Error('Snimak je prekratak ili previše tih za prepoznavanje.');
+
+    await client.post('/recognize', {
+      songId,
+      hashes: packHashes(hashes),
+      seconds
+    });
+
+    toasts.success(`Snimljen otisak: ${song?.title || ''}`, {
+      detail: `${hashes.length} parova tačaka (${seconds.toFixed(1)} s)`
+    });
+    await load();
+  } catch (err) {
+    toasts.error(err.response?.data?.message || err.message || 'Obrada snimljenog zvuka nije uspjela.');
+  } finally {
+    busyId.value = null;
+    captureChunks = [];
   }
 }
 
 const removing = ref(null);
 
-async function drop(song) {
+async function removePrint(song) {
   busyId.value = song._id;
   try {
     await client.delete(`/recognize/${song._id}`);
-    toasts.success(`Otisak uklonjen: ${song.title}`);
+    toasts.success(`Uklonjen otisak: ${song.title}`);
     await load();
   } catch (err) {
-    toasts.error(err.response?.data?.message || 'Uklanjanje nije uspjelo.');
+    toasts.error(err.response?.data?.message || 'Brisanje nije uspjelo.');
   } finally {
     busyId.value = null;
   }
 }
 
 const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs') : '—');
-const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
+const kb = (bytes) => `${Math.round((bytes || 0) / 1024)} KB`;
+const clock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+
+onMounted(load);
 </script>
 
 <template>
   <section>
+    <input ref="fileInput" type="file" accept="audio/*" class="hidden" @change="onFileSelected">
+
     <div class="mb-6">
       <h1 class="text-xl font-semibold tracking-tight">
-        Otisci zvuka
+        Zvučni otisci
         <span class="ml-2 font-mono text-sm font-normal text-faint">{{ withPrint }} / {{ rows.length }}</span>
       </h1>
       <p class="mt-1 text-sm text-muted">
         Prepoznavanje pjesme na sajtu pretražuje ove otiske. Bez otiska pjesma se ne može prepoznati.
       </p>
-      <!-- Said out loud, because it is the question anybody sensible asks first. -->
       <p class="mt-1 text-xs text-faint">
         „Sa kartice" uzima zvuk iz kartice u kojoj pjesma svira — pusti je bilo gdje i zaustavi na kraju. „Snimi" uzima gotov audio fajl.<br>Zvuk se obrađuje u browseru i ne šalje se nigdje — na server ide samo otisak, iz kojeg se zvuk ne može vratiti.
       </p>
@@ -332,7 +302,7 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
       >
     </div>
 
-    <p v-if="loading" class="text-sm text-faint">Učitavanje…</p>
+    <SkeletonLoader v-if="loading" type="table" :rows="8" :cols="5" />
     <p v-else-if="!rows.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
       Nema pjesama koje odgovaraju filteru.
     </p>
@@ -368,8 +338,6 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
           <td class="py-2.5 font-mono text-xs text-faint">{{ when(row.print?.updatedAt) }}</td>
           <td class="py-2.5">
             <div class="flex justify-end gap-2">
-              <!-- Capture from a tab: play the song anywhere and take the sound
-                   straight from it, rather than hunting down an audio file. -->
               <button
                 v-if="capturing === row.song._id"
                 class="flex items-center gap-1 rounded border border-warn bg-warn-soft px-2.5 py-1 text-xs
@@ -392,8 +360,6 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
                 @click="pick(row.song)"
               ><IconUpload /> {{ busyId === row.song._id ? 'Obrađujem…' : (row.print ? 'Zamijeni' : 'Snimi') }}</button>
 
-              <!-- Admin only, matching the endpoint: a button that always
-                   returns 403 is a worse answer than no button. -->
               <button
                 v-if="row.print && auth.hasRole('admin')"
                 class="flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
@@ -407,9 +373,6 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
       </tbody>
     </table>
 
-    <!-- Says how many rows the filter actually found, not just which page this
-         is: "50 od 1569" is the number somebody working through the catalogue
-         is keeping track of. -->
     <nav v-if="pageCount > 1" class="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm">
       <button
         class="rounded border border-line-strong px-3 py-1.5 hover:border-accent disabled:opacity-30"
@@ -428,17 +391,14 @@ const kb = (n) => (n ? `${(n / 1024).toFixed(1)} KB` : '—');
       </span>
     </nav>
 
-    <input ref="fileInput" type="file" accept="audio/*" class="hidden" @change="onFile">
-
     <AppModal
       :model-value="Boolean(removing)"
-      title="Ukloniti otisak?"
-      :description="removing ? `„${removing.title}“ se više neće moći prepoznati dok se ne snimi novi otisak.` : ''"
-      confirm-label="Ukloni"
+      title="Ukloniti zvučni otisak?"
+      :description="removing ? `Otisak za pjesmu „${removing.title}“ biće uklonjen. Pjesma se više neće moći prepoznati slušanjem.` : ''"
+      confirm-label="Ukloni otisak"
       tone="danger"
-      :busy="Boolean(busyId)"
       @update:model-value="(open) => { if (!open) removing = null; }"
-      @confirm="() => { const s = removing; removing = null; drop(s); }"
+      @confirm="() => { const s = removing; removing = null; removePrint(s); }"
     />
   </section>
 </template>

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import client from '../api/client';
+import SkeletonLoader from '../components/SkeletonLoader.vue';
 import IconViews from '~icons/material-symbols/visibility-rounded';
 import IconSaved from '~icons/material-symbols/favorite-rounded';
 import IconRate from '~icons/material-symbols/trending-up-rounded';
@@ -54,8 +55,6 @@ async function load() {
 
     if (isGaps.value) {
       gaps.value = s.data.artists;
-      // The gaps list is a whole answer, not a window onto one: paging it would
-      // invite reading page four of a work queue nobody has started.
       meta.value = null;
     } else {
       songs.value = s.data.songs;
@@ -82,87 +81,74 @@ function changeSort(key) {
 
   <p v-if="error" class="mb-4 rounded bg-accent-soft px-4 py-2 text-sm text-accent">{{ error }}</p>
 
-  <!--
-    Catalogue health, first and widest.
+  <SkeletonLoader v-if="!overview && loading" type="stats" class="mb-8" />
 
-    AI-DECISION: this panel exists because the page used to open with 2.8
-    million views and 1,569 published songs, and neither number told anyone that
-    all but twenty-two of those songs are a title with placeholder words or
-    nothing at all under it. A songbook's health is what share of it can be
-    played, and that was the one figure the dashboard did not show.
-  -->
-  <section v-if="overview?.health" class="mb-4 rounded-lg border border-line bg-panel p-4">
-    <div class="flex flex-wrap items-baseline justify-between gap-2">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint">
-        <IconHealth /> Zdravlje kataloga
+  <template v-else-if="overview">
+    <!-- Catalogue health, first and widest -->
+    <section v-if="overview.health" class="mb-4 rounded-lg border border-line bg-panel p-4">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint">
+          <IconHealth /> Zdravlje kataloga
+        </p>
+        <p class="font-mono text-2xl font-semibold" :class="overview.health.share < 0.1 ? 'text-warn' : 'text-ok'">
+          {{ percent(overview.health.share) }}
+        </p>
+      </div>
+
+      <p class="mt-1 text-xs text-muted">
+        {{ number(overview.health.playable) }} od {{ number(overview.health.total) }} pjesama ima akorde
+        koje nije napisao generator.
       </p>
-      <p class="font-mono text-2xl font-semibold" :class="overview.health.share < 0.1 ? 'text-warn' : 'text-ok'">
-        {{ percent(overview.health.share) }}
-      </p>
+
+      <div class="mt-3 flex h-2.5 overflow-hidden rounded-full bg-sunken">
+        <div class="h-full bg-ok" :style="{ width: (overview.health.playable / overview.health.total * 100) + '%' }" />
+        <div class="h-full bg-warn" :style="{ width: (overview.health.placeholder / overview.health.total * 100) + '%' }" />
+      </div>
+
+      <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <span><span class="mr-1 inline-block size-2 rounded-full bg-ok align-middle" />{{ number(overview.health.playable) }} s pravim akordima</span>
+        <span><span class="mr-1 inline-block size-2 rounded-full bg-warn align-middle" />{{ number(overview.health.placeholder) }} lorem ipsum</span>
+        <span><span class="mr-1 inline-block size-2 rounded-full bg-sunken align-middle" />{{ number(overview.health.empty) }} bez ijednog akorda</span>
+        <span v-if="overview.health.needsReview" class="text-warn">
+          {{ overview.health.needsReview }} čeka provjeru
+        </span>
+      </div>
+    </section>
+
+    <div class="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-lg border border-line bg-panel p-4">
+        <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconViews /> Pregleda</p>
+        <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.views) }}</p>
+        <p v-if="overview.seeded?.views" class="mt-0.5 text-xs text-warn">
+          {{ percent(overview.seeded.views / overview.views) }} zasijano, nije stvarni saobraćaj
+        </p>
+      </div>
+      <div class="rounded-lg border border-line bg-panel p-4">
+        <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconSaved /> Sačuvano</p>
+        <p class="mt-1 font-mono text-2xl font-semibold text-accent">{{ number(overview.favorites) }}</p>
+      </div>
+      <div class="rounded-lg border border-line bg-panel p-4">
+        <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconRate /> Stopa čuvanja</p>
+        <p class="mt-1 font-mono text-2xl font-semibold">{{ percent(overview.saveRate) }}</p>
+        <p class="mt-0.5 text-xs text-faint">koliko pregleda završi sačuvano</p>
+      </div>
+      <div class="rounded-lg border border-line bg-panel p-4">
+        <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconSongs /> Pjesama</p>
+        <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.published) }}</p>
+        <p class="mt-0.5 text-xs text-faint">+ {{ overview.drafts }} skica</p>
+      </div>
     </div>
 
-    <p class="mt-1 text-xs text-muted">
-      {{ number(overview.health.playable) }} od {{ number(overview.health.total) }} pjesama ima akorde
-      koje nije napisao generator.
-    </p>
-
-    <div class="mt-3 flex h-2.5 overflow-hidden rounded-full bg-sunken">
-      <div class="h-full bg-ok" :style="{ width: (overview.health.playable / overview.health.total * 100) + '%' }" />
-      <div class="h-full bg-warn" :style="{ width: (overview.health.placeholder / overview.health.total * 100) + '%' }" />
+    <!-- The small numbers -->
+    <div class="mb-8 flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-line-soft bg-surface px-4 py-3 text-sm">
+      <span class="text-xs uppercase tracking-wide text-faint">Stvarno zabilježeno</span>
+      <span><span class="font-mono font-semibold">{{ number(overview.users) }}</span> <span class="text-muted">čitalaca</span></span>
+      <span><span class="font-mono font-semibold">{{ number(overview.ratings) }}</span> <span class="text-muted">ocjena</span></span>
+      <span><span class="font-mono font-semibold text-accent">{{ number(overview.favorites) }}</span> <span class="text-muted">sačuvanih</span></span>
+      <span><span class="font-mono font-semibold">{{ number(overview.reviews) }}</span> <span class="text-muted">recenzija</span></span>
+      <span><span class="font-mono font-semibold">{{ number(overview.requests) }}</span> <span class="text-muted">zahtjeva</span></span>
     </div>
-
-    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-      <span><span class="mr-1 inline-block size-2 rounded-full bg-ok align-middle" />{{ number(overview.health.playable) }} s pravim akordima</span>
-      <span><span class="mr-1 inline-block size-2 rounded-full bg-warn align-middle" />{{ number(overview.health.placeholder) }} lorem ipsum</span>
-      <span><span class="mr-1 inline-block size-2 rounded-full bg-sunken align-middle" />{{ number(overview.health.empty) }} bez ijednog akorda</span>
-      <span v-if="overview.health.needsReview" class="text-warn">
-        {{ overview.health.needsReview }} čeka provjeru
-      </span>
-    </div>
-  </section>
-
-  <div v-if="overview" class="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-    <div class="rounded-lg border border-line bg-panel p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconViews /> Pregleda</p>
-      <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.views) }}</p>
-      <!--
-        AI-TRAP: the seed scripts assign views at random, so this figure is
-        mostly invented and the most-viewed list is sorted by noise. Saying so
-        here is cheaper than someone planning around it; the line removes itself
-        once the placeholder rows are gone.
-      -->
-      <p v-if="overview.seeded?.views" class="mt-0.5 text-xs text-warn">
-        {{ percent(overview.seeded.views / overview.views) }} zasijano, nije stvarni saobraćaj
-      </p>
-    </div>
-    <div class="rounded-lg border border-line bg-panel p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconSaved /> Sačuvano</p>
-      <p class="mt-1 font-mono text-2xl font-semibold text-accent">{{ number(overview.favorites) }}</p>
-    </div>
-    <div class="rounded-lg border border-line bg-panel p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconRate /> Stopa čuvanja</p>
-      <p class="mt-1 font-mono text-2xl font-semibold">{{ percent(overview.saveRate) }}</p>
-      <p class="mt-0.5 text-xs text-faint">koliko pregleda završi sačuvano</p>
-    </div>
-    <div class="rounded-lg border border-line bg-panel p-4">
-      <p class="flex items-center gap-1.5 text-xs uppercase tracking-wide text-faint"><IconSongs /> Pjesama</p>
-      <p class="mt-1 font-mono text-2xl font-semibold">{{ number(overview.published) }}</p>
-      <p class="mt-0.5 text-xs text-faint">+ {{ overview.drafts }} skica</p>
-    </div>
-  </div>
-
-  <!--
-    The small numbers, kept beside the big invented one on purpose. Ninety-six
-    ratings from twenty-one readers happened; the views did not.
-  -->
-  <div v-if="overview" class="mb-8 flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-line-soft bg-surface px-4 py-3 text-sm">
-    <span class="text-xs uppercase tracking-wide text-faint">Stvarno zabilježeno</span>
-    <span><span class="font-mono font-semibold">{{ number(overview.users) }}</span> <span class="text-muted">čitalaca</span></span>
-    <span><span class="font-mono font-semibold">{{ number(overview.ratings) }}</span> <span class="text-muted">ocjena</span></span>
-    <span><span class="font-mono font-semibold text-accent">{{ number(overview.favorites) }}</span> <span class="text-muted">sačuvanih</span></span>
-    <span><span class="font-mono font-semibold">{{ number(overview.reviews) }}</span> <span class="text-muted">recenzija</span></span>
-    <span><span class="font-mono font-semibold">{{ number(overview.requests) }}</span> <span class="text-muted">zahtjeva</span></span>
-  </div>
+  </template>
 
   <div class="mb-4 flex flex-wrap gap-2 border-b border-line pb-3 text-sm">
     <button
@@ -173,7 +159,7 @@ function changeSort(key) {
     >{{ option.label }}</button>
   </div>
 
-  <p v-if="loading" class="text-sm text-muted">Učitavanje…</p>
+  <SkeletonLoader v-if="loading" type="table" :rows="6" :cols="4" />
 
   <!-- The one list here that says what to do rather than what happened. -->
   <table v-else-if="isGaps" class="w-full text-sm">
