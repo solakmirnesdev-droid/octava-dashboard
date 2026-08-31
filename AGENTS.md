@@ -67,6 +67,55 @@ workflow. Before writing any UI:
 
 ---
 
+---
+
+## Katalog — pravila koja vrijede i ovdje
+
+Podaci koje ovaj repo prikazuje poliraju se u **octava-backend**. Radna knjiga
+je `octava-backend/KATALOG.md` — izmjereno stanje svih ~14.400 pjesama, red
+posla i zamke. Pročitaj je prije nego dodirneš išta što parsira tekst pjesme.
+
+**Poliranje kataloga se NE piše ovdje.** Ako nešto treba popraviti u podacima,
+to ide u `octava-backend`, kroz `npm run katalog`. Frontend prikazuje, ne
+popravlja.
+
+### Invarijante ChordPro parsera
+
+Ovaj repo ima `chordpro.js`. Ove tri stvari su izmjerene na pravim podacima i
+lome parser ako se pogriješe:
+
+1. **Akord i oznaka sekcije imaju istu sintaksu.** `[Am]` i `[Strofa 2]` su
+   oboje zagrade. Akord je korijen + predznak + kratak sufiks i ništa više;
+   sve ostalo je oznaka. Zamijeniš li ih, svaka pjesma izgleda ili
+   strukturirano ili bez akorada — oba su netačna.
+
+2. **Akordi su inline, ne iznad reda.** Format je `ja [Am]sam`, ne akord u
+   zasebnom redu iznad teksta. Pravilo koje traži akord na početku reda
+   prijavi 85% kataloga kao „bez akorada"; istina je 9,6%.
+
+3. **Dupli razmak u redu koji je samo akord je nosiv.** `[Am]   [F]   [C]` —
+   razmak drži akord iznad sloga. Ne skupljaj ga.
+
+### Poznati kvar u podacima
+
+**3.523 pjesme (24,5%) imaju akord slijepljen s oznakom sekcije:**
+
+```
+[Hm][Strofa [G]1]     [D]       [A]
+```
+
+Parser to ne smije srušiti. Popravka je zakazana u backendu i namjerno nije
+automatizovana — pogrešna pretpostavka pomjera akorde u četvrtini kataloga.
+
+### Novo polje: `Song.quality`
+
+Backend upisuje `quality.score` (0–100) i `quality.flags` (npr.
+`sekcija-bez-akorda`, `prazna-pjesma`) na svaku pjesmu.
+
+Na dashboardu to je red posla: sortiraj po `quality.score` rastuće i dobiješ
+„traži pažnju", najgore prvo. **1.286 pjesama su prazni ostaci uvoznika** —
+naslov bez teksta.
+
 ## Model routing
 
 | Task | Model |
