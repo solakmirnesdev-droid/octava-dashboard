@@ -108,9 +108,9 @@ export function parseSong(content) {
 
   return content.split('\n').map((line) => {
     // A line that is only a section marker becomes a heading rather than a row.
-    const heading = line.trim().match(/^\[([^\]]+)\]$/);
+    const heading = line.trim().match(/^\[([^\]]+)\]:?$/);
     if (heading && !isChord(heading[1])) {
-      return { type: 'section', label: heading[1] };
+      return { type: 'section', label: heading[1].trim() };
     }
 
     const segments = [];
