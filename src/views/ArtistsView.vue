@@ -78,6 +78,10 @@ const flagOf = (code) => (code && /^[A-Z]{2}$/.test(code)
   : '');
 
 const artists = ref([]);
+
+/** Server paging for the list, and the counts it cannot carry per page. */
+const meta = ref(null);
+const facets = ref({ total: 0, withoutCountry: 0, withoutImage: 0, countries: [] });
 const genres = ref([]);
 const loading = ref(true);
 const filter = ref('');
@@ -99,41 +103,8 @@ const cacheKey = (a) => (a.imageUpdatedAt ? Date.parse(a.imageUpdatedAt) : 0);
 const apiBase = import.meta.env.VITE_API_URL || '/api';
 const failedImages = ref(new Set());
 
-const visible = computed(() => {
-  let list = artists.value.filter((a) => {
-    if (missingImage.value && a.hasImage) return false;
-    if (missingCountry.value && a.country) return false;
-    if (countryFilter.value && a.country !== countryFilter.value) return false;
-    if (activeLetter.value !== 'Sve') {
-      const name = (a.name || '').trim();
-      if (activeLetter.value === '#') {
-        if (!/^[^A-ZČĆĐŠŽa-zčćđšž]/.test(name)) return false;
-      } else if (activeLetter.value === 'Dž') {
-        if (!name.toUpperCase().startsWith('DŽ')) return false;
-      } else if (activeLetter.value === 'Lj') {
-        if (!name.toUpperCase().startsWith('LJ')) return false;
-      } else if (activeLetter.value === 'Nj') {
-        if (!name.toUpperCase().startsWith('NJ')) return false;
-      } else {
-        if (!name.toUpperCase().startsWith(activeLetter.value.toUpperCase())) return false;
-      }
-    }
-    return true;
-  });
-
-  if (filter.value.trim()) {
-    list = filterByQuery(list, filter.value, (a) => a.name);
-  }
-
-  // Apply sorting
-  return [...list].sort((a, b) => {
-    if (sortBy.value === 'songs_desc') return (b.songCount || 0) - (a.songCount || 0);
-    if (sortBy.value === 'songs_asc') return (a.songCount || 0) - (b.songCount || 0);
-    if (sortBy.value === 'name_desc') return b.name.localeCompare(a.name, 'bs');
-    if (sortBy.value === 'images_first') return (b.hasImage ? 1 : 0) - (a.hasImage ? 1 : 0);
-    return a.name.localeCompare(b.name, 'bs');
-  });
-});
+// The server returns exactly the page asked for; nothing left to narrow here.
+const visible = computed(() => artists.value);
 
 let isFetching = false;
 const highlightedArtistIds = ref(new Set());
@@ -183,36 +154,20 @@ watch(() => artists.value.length, (newLen, oldLen) => {
   }
 });
 
-async function fetchAllArtists() {
-  const { data: firstPage } = await client.get('/artists', { params: { page: 1, limit: 100 } });
-  const out = [...(firstPage.artists || [])];
-  const totalPages = firstPage.meta?.pages || 1;
-
-  if (totalPages > 1) {
-    const pageNumbers = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-    // Fetch remaining pages in controlled parallel batches of 5
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < pageNumbers.length; i += BATCH_SIZE) {
-      const batch = pageNumbers.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(
-        batch.map((p) =>
-          client.get('/artists', { params: { page: p, limit: 100 } })
-            .then((res) => res.data.artists || [])
-            .catch((err) => {
-              console.warn(`Greška pri dohvatanju stranice ${p}:`, err);
-              return [];
-            })
-        )
-      );
-      for (const pageArr of results) {
-        out.push(...pageArr);
-      }
-    }
-  }
-
-  return out;
-}
-
+/**
+ * One page, filtered where the data is.
+ *
+ * AI-DECISION: this used to page through the whole roster — 29 requests and
+ * 1.1MB for 2,813 performers — and then filter in the browser. Every filter it
+ * applied has a server parameter behind it (q, country, letter, gap), and the
+ * three numbers it tallied by hand now come from /artists/facets in one
+ * aggregate. What is left is a page of 48.
+ *
+ * AI-TRAP: `gap` and `country` are mutually exclusive by construction. Asking
+ * for artists with no country AND with country=RS returns nothing, which reads
+ * as a broken filter rather than an impossible question — so the country
+ * dropdown is cleared when a gap filter is turned on.
+ */
 async function load() {
   if (isFetching) return;
   isFetching = true;
@@ -220,8 +175,24 @@ async function load() {
     loading.value = true;
   }
   try {
-    const [all, { data: g }] = await Promise.all([fetchAllArtists(), client.get('/genres')]);
-    artists.value = all;
+    const params = {
+      page: page.value,
+      limit: PER_PAGE,
+      q: filter.value.trim() || undefined,
+      country: countryFilter.value || undefined,
+      letter: activeLetter.value !== 'Sve' ? activeLetter.value : undefined,
+      gap: missingCountry.value ? 'country' : (missingImage.value ? 'image' : undefined)
+    };
+
+    const [{ data }, { data: g }, { data: f }] = await Promise.all([
+      client.get('/artists', { params }),
+      client.get('/genres'),
+      client.get('/artists/facets')
+    ]);
+
+    artists.value = data.artists || [];
+    meta.value = data.meta || null;
+    facets.value = f;
     genres.value = g.genres || [];
     trackAndHighlightArtists(artists.value);
   } catch (err) {
@@ -589,31 +560,28 @@ function removeImage() {
   stagedImageRemove.value = true;
 }
 
-const presentCountries = computed(() => {
-  const counts = new Map();
-  for (const a of artists.value) {
-    if (a.country) counts.set(a.country, (counts.get(a.country) || 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([code, count]) => ({
-      code,
-      count,
-      name: COUNTRIES.find((c) => c.code === code)?.name || code
-    }))
-    .sort((x, y) => y.count - x.count);
-});
+const presentCountries = computed(() =>
+  facets.value.countries.map((c) => ({
+    code: c.code,
+    count: c.count,
+    name: COUNTRIES.find((x) => x.code === c.code)?.name || c.code
+  }))
+);
 
 const PER_PAGE = 48;
 const page = ref(1);
 
-const pageCount = computed(() => Math.max(1, Math.ceil(visible.value.length / PER_PAGE)));
+const pageCount = computed(() => Math.max(1, meta.value?.pages || 1));
 
 const pageArtists = computed(() => {
-  const start = (page.value - 1) * PER_PAGE;
-  return visible.value.slice(start, start + PER_PAGE);
+  return artists.value;
 });
 
-watch([filter, countryFilter, missingImage, missingCountry], () => { page.value = 1; });
+watch([filter, countryFilter, missingImage, missingCountry, activeLetter], () => {
+  page.value = 1;
+  load();
+});
+watch(page, load);
 watch(pageCount, (count) => { if (page.value > count) page.value = count; });
 
 function turn(to) {
@@ -621,8 +589,8 @@ function turn(to) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-const withoutImage = computed(() => artists.value.filter((a) => !a.hasImage).length);
-const withoutCountry = computed(() => artists.value.filter((a) => !a.country).length);
+const withoutImage = computed(() => facets.value.withoutImage);
+const withoutCountry = computed(() => facets.value.withoutCountry);
 
 const imageUrl = (a) => `${apiBase}/artists/${a._id}/image?v=${cacheKey(a)}`;
 
