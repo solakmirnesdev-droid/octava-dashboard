@@ -1,3 +1,48 @@
+### 2026-08-30 — Traps worth not rediscovering
+
+Written down a second time: the first copy was lost when this file was rewritten
+before it reached a commit. Each of these cost real time to find.
+
+- **Never infer how long a session lasts.** `useSessionGuard` kept "the longest
+  remaining time we have ever seen" and renewed once a threshold of it was
+  spent. Wrong twice: opening the dashboard on a half-spent token records a
+  short span so the threshold is never reached, and any remount — a hot reload,
+  and this repo has a second agent editing files — resets it mid-session. The
+  session then expired under somebody actively working. `exp - iat` off the
+  token is the real span and needs no state.
+- **A ref updated by `setInterval` is fine for rendering and wrong for
+  deciding.** Background tabs throttle timers to ~1/min, so anything with a
+  deadline in it must read `Date.now()` directly. (This was the *first*
+  diagnosis of the bug above and it was wrong — a plausible mechanism is not a
+  cause. Correct practice regardless.)
+- **The artist grid throttled itself.** `imageUrl` stamped `?v=${Date.now()}`
+  fresh on every mount, so 125 portraits were refetched every visit and the
+  day-long `Cache-Control` the API already sends never applied. That alone spent
+  `publicLimiter` (120/min) and the *next write* — saving an edited artist —
+  came back 429 with no message shown. The key is now the image's own
+  `imageUpdatedAt`.
+- **Search looked broken and was two typos.** The client called `/search`; the
+  route is `/songs/search`, so every query 404'd into the catch and showed
+  "Učitavanje nije uspjelo". With the path fixed it 400'd, because
+  `songSearchQuery` is `.strict()` and never listed `page` although the
+  controller had always paged. `.strict()` is worth keeping, but the schema is
+  part of the endpoint's contract.
+- **Long lists are paged in the client, never by the API** (`FingerprintsView`
+  50, `ArtistsView` 48 — the grid is 2 columns at sm and 3 at lg). The whole set
+  has to stay in memory or the typo-tolerant filter could only search the page
+  it was sent. When inserting a pager, anchor on the *last* `</ul>`: ArtistsView
+  has another list inside the editor panel, and the pager landed inside
+  `v-if="editing"` where it never rendered.
+- **`vite build` dies with `'node:util' does not provide an export named
+  styleText`.** Nothing to do with the config — `@iconify/utils` needs Node
+  ≥20.12 and a plain shell here may resolve an older one. Check
+  `ls ~/.nvm/versions/node` rather than trusting a version written down; the
+  ones present change (as of 2026-08-30, v22.23.2 and v24.15.0).
+- **An editor that opens above the fold reads as a dead button.** `ArtistsView`
+  renders its panel at the top of a 125-card grid; pressing Uredi on a row near
+  the bottom put the form ~2450px above the viewport and nothing moved.
+  `revealEditor()` scrolls it in and focuses the name.
+
   challenges (TOTP authenticator app, email OTP, and single-use backup codes),
   with code verification, email OTP resend, and returning to password step.
 - **Why:** The backend and `SecurityView.vue` enabled 2FA, but without 2FA

@@ -53,21 +53,7 @@ function confirm() {
   emit('confirm');
 }
 
-/**
- * How many dialogs currently want the page held still.
- *
- * AI-TRAP: this has to live outside the component, not inside <script setup>.
- * Several AppModals are mounted at once — the layout renders one LogoutButton
- * for the desktop nav and another for the mobile drawer, and Teleport lifts each
- * dialog out of its hidden container — so a per-instance counter lets one modal
- * closing hand scrolling back to a page another modal is still covering.
- */
-function lockScroll(on) {
-  if (typeof document === 'undefined') return;
-  const held = Math.max(0, Number(document.body.dataset.modalCount || 0) + (on ? 1 : -1));
-  document.body.dataset.modalCount = String(held);
-  document.body.style.overflow = held > 0 ? 'hidden' : '';
-}
+import { lockModalScroll } from '../utils/modalLock';
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -96,7 +82,7 @@ function onKeydown(event) {
 }
 
 watch(() => props.modelValue, async (open) => {
-  lockScroll(open);
+  lockModalScroll(open);
 
   if (open) {
     returnFocusTo = typeof document !== 'undefined' ? document.activeElement : null;
@@ -114,7 +100,7 @@ watch(() => props.modelValue, async (open) => {
 });
 
 onBeforeUnmount(() => {
-  if (props.modelValue) lockScroll(false);
+  if (props.modelValue) lockModalScroll(false);
 });
 </script>
 
@@ -152,30 +138,32 @@ onBeforeUnmount(() => {
           role="dialog" aria-modal="true"
           :aria-labelledby="title ? 'modal-title' : undefined"
           tabindex="-1"
-          class="relative w-full max-w-md rounded-t-xl border border-line bg-panel p-5 shadow-xl outline-none
-                 sm:rounded-xl"
+          class="relative w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl border border-line bg-panel p-5 shadow-2xl outline-none sm:rounded-2xl safe-area-pb animate-in slide-in-from-bottom-4 duration-200"
         >
-          <h2 v-if="title" id="modal-title" class="text-base font-semibold tracking-tight">{{ title }}</h2>
-          <p v-if="description" class="mt-1.5 text-sm leading-relaxed text-muted">{{ description }}</p>
+          <!-- Mobile Grab Bar -->
+          <div class="sm:hidden mx-auto -mt-1 mb-3 h-1.5 w-10 rounded-full bg-line-strong/80" />
 
-          <div v-if="$slots.default" class="mt-4 text-sm">
+          <h2 v-if="title" id="modal-title" class="text-base sm:text-lg font-bold tracking-tight text-ink">{{ title }}</h2>
+          <p v-if="description" class="mt-1.5 text-xs sm:text-sm leading-relaxed text-muted">{{ description }}</p>
+
+          <div v-if="$slots.default" class="mt-4 text-xs sm:text-sm">
             <slot />
           </div>
 
-          <div class="mt-5 flex justify-end gap-2">
+          <div class="mt-5 flex items-center justify-end gap-2">
             <slot name="actions">
               <button
                 type="button" :disabled="busy"
-                class="rounded px-4 py-2 text-sm text-muted hover:text-ink disabled:opacity-40"
+                class="rounded-lg px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-medium text-muted hover:text-ink disabled:opacity-40 transition cursor-pointer"
                 @click="close()"
               >{{ cancelLabel || 'Odustani' }}</button>
 
               <button
                 type="button" :disabled="busy || confirmDisabled"
-                class="rounded px-4 py-2 text-sm font-medium disabled:opacity-40"
+                class="rounded-lg px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold disabled:opacity-40 transition shadow-xs cursor-pointer active:scale-95"
                 :class="danger
                   ? 'bg-danger text-on-danger hover:opacity-90'
-                  : 'bg-ink text-on-ink hover:bg-accent'"
+                  : 'bg-accent text-on-accent hover:brightness-110'"
                 @click="confirm"
               >{{ busy ? '…' : (confirmLabel || 'Potvrdi') }}</button>
             </slot>

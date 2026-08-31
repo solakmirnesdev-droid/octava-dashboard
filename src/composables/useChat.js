@@ -26,12 +26,39 @@ const messages = ref([]);
 const activeId = ref(null);
 const loading = ref(false);
 
+/** Which page of the open thread has been fetched, and whether more remain. */
+const threadPage = ref(1);
+const threadPages = ref(1);
+const loadingOlder = ref(false);
+
+export const hasOlder = computed(() => threadPage.value < threadPages.value);
+
 const me = ref(null);
 
 /** True when the server refused the handshake rather than the network failing. */
 const authFailed = ref(false);
 
 let stopWatchingToken = null;
+
+/**
+ * Listeners registered by anything that is not the chat.
+ *
+ * AI-DECISION: a seam rather than more `s.on(...)` calls inside connect(). The
+ * socket is the dashboard's one live connection and the chat merely happens to
+ * own it; wiring the notification badge in here directly would make every
+ * future push a reason to edit this file.
+ *
+ * AI-TRAP: handlers register before the socket exists — the layout sets them up
+ * on mount, and connect() may run after. They are held and bound on connect,
+ * and bound immediately if it is already open. Without both halves a listener
+ * silently never fires, depending on which ran first.
+ */
+const extraHandlers = new Map();
+
+export function onSocket(event, handler) {
+  extraHandlers.set(event, handler);
+  socket.value?.on(event, handler);
+}
 
 export const totalUnread = computed(() =>
   peers.value.reduce((sum, p) => sum + (p.unread || 0), 0));
@@ -136,6 +163,8 @@ function connect() {
     }
   });
 
+  for (const [event, handler] of extraHandlers) s.on(event, handler);
+
   socket.value = s;
 }
 
@@ -152,15 +181,60 @@ function disconnect() {
 async function openThread(peerId) {
   activeId.value = peerId;
   messages.value = [];
+  threadPage.value = 1;
+  threadPages.value = 1;
   loading.value = true;
 
   try {
-    const { data } = await client.get(`/chat/with/${peerId}`, { params: { limit: 100 } });
+    const { data } = await client.get(`/chat/with/${peerId}`, { params: { limit: PAGE } });
     messages.value = data.messages;
+    threadPages.value = data.meta?.pages || 1;
     socket.value?.emit('chat:read', { with: peerId });
     bump(peerId, { unread: 0 });
   } finally {
     loading.value = false;
+  }
+}
+
+/**
+ * The page before the one already on screen, prepended.
+ *
+ * AI-NOTE: page one of a thread is its END — the server sorts newest-first and
+ * reverses before sending, so each further page is another step backwards in
+ * time and belongs in front of what is held, not behind it.
+ *
+ * AI-TRAP: prepending pushes everything down by the height of what arrived, and
+ * a reader who asked for older messages ends up looking at a different part of
+ * the conversation than the one they were reading. The caller is handed the
+ * scroll height from before the insert so it can put them back — the composable
+ * cannot do it, because it has no element.
+ *
+ * @returns {boolean} whether anything was added
+ */
+async function loadOlder() {
+  if (!activeId.value || loadingOlder.value || !hasOlder.value) return false;
+
+  loadingOlder.value = true;
+  const next = threadPage.value + 1;
+
+  try {
+    const { data } = await client.get(`/chat/with/${activeId.value}`, {
+      params: { limit: PAGE, page: next }
+    });
+
+    const older = data.messages || [];
+    if (older.length) {
+      // Guarded: a message that arrived live while this was in flight would
+      // otherwise appear twice, once from each direction.
+      const held = new Set(messages.value.map((m) => String(m._id)));
+      messages.value = [...older.filter((m) => !held.has(String(m._id))), ...messages.value];
+    }
+
+    threadPage.value = next;
+    threadPages.value = data.meta?.pages || threadPages.value;
+    return older.length > 0;
+  } finally {
+    loadingOlder.value = false;
   }
 }
 
@@ -180,6 +254,7 @@ export function useChat() {
   return {
     connected, authFailed, peers, online, messages, activeId, loading, me, totalUnread,
     connect, disconnect, loadPeers, openThread, send,
+    loadOlder, hasOlder, loadingOlder,
     isOnline: (id) => online.value.has(id)
   };
 }

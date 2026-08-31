@@ -10,13 +10,13 @@ const { mode, label, cycle } = useTheme();
 <template>
   <button
     type="button"
-    class="flex items-center gap-1.5 rounded px-2 py-1 text-muted hover:bg-raised hover:text-accent"
+    class="flex items-center gap-1.5 rounded-lg p-1.5 text-muted hover:bg-raised hover:text-accent transition-all active:scale-90 cursor-pointer"
     :title="`Tema: ${label}`"
     :aria-label="`Tema: ${label}`"
     @click="cycle"
   >
-    <IconAuto v-if="mode === 'system'" class="text-base" />
-    <IconLight v-else-if="mode === 'light'" class="text-base" />
-    <IconDark v-else class="text-base" />
+    <IconAuto v-if="mode === 'system'" class="text-base text-muted transition-transform duration-200" />
+    <IconLight v-else-if="mode === 'light'" class="text-base text-warn transition-transform duration-200" />
+    <IconDark v-else class="text-base text-accent transition-transform duration-200" />
   </button>
 </template>

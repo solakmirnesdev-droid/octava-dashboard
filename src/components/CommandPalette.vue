@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useTheme } from '../composables/useTheme';
 import { useChat } from '../composables/useChat';
+import { lockModalScroll } from '../utils/modalLock';
 import client from '../api/client';
 import IconSearch from '~icons/material-symbols/search-rounded';
 import IconSongs from '~icons/material-symbols/queue-music-rounded';
@@ -203,6 +204,7 @@ function onKeyDown(e) {
 }
 
 watch(isOpen, async (val) => {
+  lockModalScroll(val);
   if (val) {
     activeIndex.value = 0;
     await nextTick();
@@ -215,6 +217,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (isOpen.value) lockModalScroll(false);
   window.removeEventListener('keydown', onKeyDown);
 });
 </script>
@@ -223,62 +226,70 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 md:p-20 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      class="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-6 md:p-20 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       @click.self="close"
     >
       <div
-        class="w-full max-w-xl overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl transition-all"
+        class="w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden rounded-2xl border border-line-strong bg-panel shadow-2xl transition-all"
         role="dialog"
         aria-modal="true"
         aria-label="Komandna paleta"
       >
         <!-- Search Input Header -->
-        <div class="flex items-center gap-3 border-b border-line px-4 py-3.5 bg-surface/40">
-          <IconSearch class="text-lg text-muted shrink-0" />
+        <div class="flex items-center gap-3 border-b border-line px-4 py-3 bg-surface/40">
+          <IconSearch class="text-lg text-accent shrink-0" />
           <input
             ref="inputRef"
             v-model="query"
             type="text"
-            placeholder="Pretraži pjesme, izvođače, akcije ili navigaciju…"
-            class="w-full bg-transparent text-sm text-ink placeholder-faint outline-none"
+            placeholder="Pretraži pjesme, izvođače ili akcije…"
+            class="w-full bg-transparent text-sm text-ink placeholder-faint outline-none font-medium"
           />
-          <kbd class="hidden sm:inline-block rounded border border-line px-1.5 py-0.5 text-[10px] font-mono font-medium text-faint bg-raised">
+          <button
+            v-if="query"
+            type="button"
+            class="sm:hidden text-xs text-muted hover:text-ink p-1 cursor-pointer"
+            @click="query = ''"
+          >
+            ✕
+          </button>
+          <kbd class="hidden sm:inline-block rounded-md border border-line px-1.5 py-0.5 text-[10px] font-mono font-medium text-faint bg-raised">
             ESC
           </kbd>
         </div>
 
         <!-- Results List -->
-        <div class="max-h-[60vh] overflow-y-auto p-2 divide-y divide-line-soft">
+        <div class="flex-1 overflow-y-auto p-2 divide-y divide-line-soft">
           <div v-if="searching" class="px-4 py-3 text-xs text-faint italic">
             Pretraga kataloga…
           </div>
 
-          <div v-if="!allItems.length && !searching" class="px-4 py-8 text-center text-sm text-faint">
+          <div v-if="!allItems.length && !searching" class="px-4 py-8 text-center text-xs sm:text-sm text-faint">
             Nema rezultata za „{{ query }}“
           </div>
 
-          <ul v-else class="space-y-0.5">
+          <ul v-else class="space-y-1">
             <li
               v-for="(item, idx) in allItems"
               :key="item.id"
-              class="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm cursor-pointer transition-colors"
-              :class="idx === activeIndex ? 'bg-accent-soft text-accent' : 'text-body hover:bg-raised'"
+              class="flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-xs sm:text-sm cursor-pointer transition-colors"
+              :class="idx === activeIndex ? 'bg-accent-soft text-accent font-semibold' : 'text-body hover:bg-raised'"
               @click="selectItem(item)"
               @mouseenter="activeIndex = idx"
             >
-              <div class="flex items-center gap-3 min-w-0">
+              <div class="flex items-center gap-2.5 min-w-0">
                 <component
                   :is="item.icon"
                   class="text-base shrink-0"
                   :class="idx === activeIndex ? 'text-accent' : 'text-muted'"
                 />
                 <div class="min-w-0">
-                  <p class="truncate font-medium">{{ item.label }}</p>
-                  <p v-if="item.sub" class="truncate text-xs opacity-75">{{ item.sub }}</p>
+                  <p class="truncate">{{ item.label }}</p>
+                  <p v-if="item.sub" class="truncate text-[11px] opacity-75">{{ item.sub }}</p>
                 </div>
               </div>
 
-              <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider bg-sunken text-faint">
+              <span class="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider bg-sunken text-faint">
                 {{ item.category }}
               </span>
             </li>
@@ -288,10 +299,11 @@ onBeforeUnmount(() => {
         <!-- Footer Key Hints -->
         <div class="flex items-center justify-between border-t border-line bg-surface/50 px-4 py-2 text-[11px] text-faint">
           <div class="flex items-center gap-3">
-            <span><kbd class="font-mono">↑↓</kbd> navigacija</span>
-            <span><kbd class="font-mono">↵</kbd> odaberi</span>
+            <span class="hidden sm:inline"><kbd class="font-mono bg-raised px-1 rounded">↑↓</kbd> navigacija</span>
+            <span class="hidden sm:inline"><kbd class="font-mono bg-raised px-1 rounded">↵</kbd> odaberi</span>
+            <span class="sm:hidden font-medium">Dodirnite stavku za otvaranje</span>
           </div>
-          <span>Octava Quick Jump</span>
+          <span class="font-mono text-[10px]">Octava Jump</span>
         </div>
       </div>
     </div>

@@ -78,76 +78,80 @@ function remove() {
 </script>
 
 <template>
-  <!-- Sticky at the foot of the viewport: the selection is made by scrolling
-       through the list, so the controls have to stay where the eyes already are. -->
+  <!-- Sticky at the foot of the viewport: positioned above mobile bottom nav on small screens -->
   <div
-    class="sticky bottom-4 z-20 mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-line-strong
-           bg-panel p-3 text-sm shadow-lg"
+    class="sticky bottom-14 sm:bottom-4 z-20 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-line-strong
+           bg-panel/95 backdrop-blur-md p-3 text-xs sm:text-sm shadow-2xl animate-in slide-in-from-bottom duration-200"
   >
-    <span class="mr-1 font-medium">
-      {{ count }} <span class="font-normal text-muted">izabrano</span>
-    </span>
+    <div class="flex items-center gap-2 mr-1">
+      <span class="font-bold text-ink">
+        {{ count }} <span class="font-normal text-muted">izabrano</span>
+      </span>
+    </div>
 
-    <button
-      class="flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
-             hover:border-ok hover:text-ok disabled:opacity-40"
-      :disabled="busy" @click="run('status', 'published', 'su objavljene')"
-    ><IconPublish /> Objavi</button>
+    <div class="flex items-center gap-1.5 flex-wrap">
+      <button
+        class="flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-1 text-xs text-muted
+               hover:border-ok hover:text-ok disabled:opacity-40 transition cursor-pointer font-medium"
+        :disabled="busy" @click="run('status', 'published', 'su objavljene')"
+      ><IconPublish class="text-sm" /> Objavi</button>
 
-    <button
-      class="flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
-             hover:border-warn hover:text-warn disabled:opacity-40"
-      :disabled="busy" @click="run('status', 'draft', 'su na čekanju')"
-    ><IconUnpublish /> Skini s objave</button>
+      <button
+        class="flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-1 text-xs text-muted
+               hover:border-warn hover:text-warn disabled:opacity-40 transition cursor-pointer font-medium"
+        :disabled="busy" @click="run('status', 'draft', 'su na čekanju')"
+      ><IconUnpublish class="text-sm" /> Skini s objave</button>
 
-    <span class="mx-1 h-5 w-px bg-sunken" aria-hidden="true" />
+      <span class="hidden sm:inline-block mx-1 h-4 w-px bg-line" aria-hidden="true" />
 
-    <select
-      v-model="genre"
-      class="rounded border border-line-strong bg-panel px-2 py-1 text-xs outline-none focus:border-accent"
-      aria-label="Žanr"
-    >
-      <option value="">Žanr…</option>
-      <option v-for="g in genres" :key="g._id" :value="g.slug">{{ g.name }}</option>
-    </select>
-    <button
-      class="rounded border border-line-strong px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-40"
-      :disabled="busy" @click="applyGenre('addGenre')"
-    >Dodaj</button>
-    <button
-      class="rounded border border-line-strong px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-40"
-      :disabled="busy" @click="applyGenre('removeGenre')"
-    >Ukloni</button>
+      <select
+        v-model="genre"
+        class="rounded-lg border border-line-strong bg-panel px-2 py-1 text-xs outline-none focus:border-accent shadow-2xs font-medium cursor-pointer"
+        aria-label="Žanr"
+      >
+        <option value="">Žanr…</option>
+        <option v-for="g in genres" :key="g._id" :value="g.slug">{{ g.name }}</option>
+      </select>
+      <button
+        class="rounded-lg border border-line-strong px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-40 transition cursor-pointer font-medium"
+        :disabled="busy" @click="applyGenre('addGenre')"
+      >+ Žanr</button>
+      <button
+        class="rounded-lg border border-line-strong px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-40 transition cursor-pointer font-medium"
+        :disabled="busy" @click="applyGenre('removeGenre')"
+      >- Žanr</button>
 
-    <span class="mx-1 h-5 w-px bg-sunken" aria-hidden="true" />
+      <span class="hidden sm:inline-block mx-1 h-4 w-px bg-line" aria-hidden="true" />
 
-    <input
-      v-model="tag" type="text" placeholder="tag…"
-      class="w-24 rounded border border-line-strong bg-panel px-2 py-1 text-xs outline-none focus:border-accent"
-      aria-label="Tag"
-      @keyup.enter="applyTag('addTag')"
-    >
-    <button
-      class="rounded border border-line-strong px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-40"
-      :disabled="busy" @click="applyTag('addTag')"
-    >Dodaj</button>
-    <button
-      class="rounded border border-line-strong px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-40"
-      :disabled="busy" @click="applyTag('removeTag')"
-    >Ukloni</button>
+      <input
+        v-model="tag" type="text" placeholder="tag…"
+        class="w-20 sm:w-24 rounded-lg border border-line-strong bg-panel px-2 py-1 text-xs outline-none focus:border-accent shadow-2xs"
+        aria-label="Tag"
+        @keyup.enter="applyTag('addTag')"
+      >
+      <button
+        class="rounded-lg border border-line-strong px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-40 transition cursor-pointer font-medium"
+        :disabled="busy" @click="applyTag('addTag')"
+      >+ Tag</button>
+      <button
+        class="rounded-lg border border-line-strong px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-40 transition cursor-pointer font-medium"
+        :disabled="busy" @click="applyTag('removeTag')"
+      >- Tag</button>
+    </div>
 
-    <button
-      v-if="canDelete"
-      class="ml-auto flex items-center gap-1 rounded border border-line-strong px-2.5 py-1 text-xs text-muted
-             hover:border-danger hover:text-danger disabled:opacity-40"
-      :disabled="busy" @click="remove"
-    ><IconDelete /> Obriši</button>
+    <div class="ml-auto flex items-center gap-2">
+      <button
+        v-if="canDelete"
+        class="flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-1 text-xs text-muted
+               hover:border-danger hover:text-danger disabled:opacity-40 transition cursor-pointer font-medium"
+        :disabled="busy" @click="remove"
+      ><IconDelete class="text-sm" /> Obriši</button>
 
-    <button
-      class="flex items-center gap-1 rounded px-2 py-1 text-xs text-faint hover:text-ink"
-      :class="canDelete ? '' : 'ml-auto'"
-      :disabled="busy" @click="emit('clear')"
-    ><IconClose /> Poništi izbor</button>
+      <button
+        class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-faint hover:text-ink transition cursor-pointer font-medium"
+        :disabled="busy" @click="emit('clear')"
+      ><IconClose class="text-sm" /> Poništi</button>
+    </div>
 
     <AppModal
       v-model="asking"

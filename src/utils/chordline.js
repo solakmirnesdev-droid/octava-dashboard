@@ -65,7 +65,9 @@ export function columnToSource(source, column) {
 
 export function insertChord(source, column, chord) {
   const at = columnToSource(source, column);
-  return source.slice(0, at) + '[' + chord + ']' + source.slice(at);
+  const { plain } = parseLine(source);
+  const padSpaces = Math.max(0, column - plain.length);
+  return source.slice(0, at) + ' '.repeat(padSpaces) + '[' + chord + ']' + source.slice(at);
 }
 
 export function replaceChord(source, chordIndex, chord) {
@@ -83,3 +85,50 @@ export function removeChord(source, chordIndex) {
 
   return source.slice(0, target.sourceStart) + source.slice(target.sourceEnd);
 }
+
+/**
+ * Reconstructs a ChordPro formatted line from plain text and chord tokens.
+ *
+ * @param {string} plain - The visible text
+ * @param {Array<{chord: string, column: number}>} chords - Chords with column indices
+ * @returns {string} The reconstructed ChordPro line
+ */
+export function buildLineWithChords(plain, chords) {
+  if (!chords || !chords.length) return plain || '';
+  const sorted = [...chords].sort((a, b) => a.column - b.column);
+  let res = '';
+  let lastCol = 0;
+
+  for (const c of sorted) {
+    const col = Math.max(0, c.column);
+    if (col > lastCol) {
+      if (lastCol < plain.length) {
+        res += plain.slice(lastCol, Math.min(col, plain.length));
+      }
+      if (col > plain.length && lastCol <= plain.length) {
+        res += ' '.repeat(col - plain.length);
+      }
+    }
+    res += `[${c.chord}]`;
+    lastCol = Math.min(col, plain.length);
+  }
+
+  if (lastCol < plain.length) {
+    res += plain.slice(lastCol);
+  }
+
+  return res;
+}
+
+/**
+ * Updates the plain text of a line while preserving all chord placements.
+ *
+ * @param {string} source - Original ChordPro line
+ * @param {string} newPlain - Updated plain text
+ * @returns {string} Updated ChordPro line
+ */
+export function updatePlainText(source, newPlain) {
+  const { chords } = parseLine(source);
+  return buildLineWithChords(newPlain, chords);
+}
+

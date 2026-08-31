@@ -5,10 +5,17 @@ import client from '../api/client';
 /**
  * The unread badge in the header, and the feed behind it.
  *
- * Polled rather than pushed. A websocket would be the right answer for a busy
- * desk, but this one is two or three people and a review lands every few hours;
- * a socket to keep open, reconnect and authenticate is a lot of machinery for a
- * number that can be a minute stale without anyone noticing.
+ * Polled AND pushed, in that order of trust.
+ *
+ * AI-NOTE: this used to be polling only, and the reason written here was that a
+ * socket to keep open, reconnect and authenticate was too much machinery for a
+ * number allowed to be a minute stale. That was right at the time. It stopped
+ * being right when the desk chat brought a socket that is already open, already
+ * authenticated and already reconnecting — the cost the argument rested on is
+ * now paid by something else.
+ *
+ * The poll stays as the floor. A push is a nice-to-have that misses anything
+ * raised while the tab was closed; the poll is what makes the count correct.
  */
 export const useNotificationsStore = defineStore('notifications', () => {
   const unread = ref(0);
@@ -68,5 +75,24 @@ export const useNotificationsStore = defineStore('notifications', () => {
     timer = null;
   }
 
-  return { unread, items, total, pages, loading, fetchUnread, fetchPage, markRead, startPolling, stopPolling };
+  /**
+   * A live event from the server.
+   *
+   * AI-TRAP: guarded against duplicates. The push and the next poll can both
+   * carry the same row, and a badge that counts it twice is worse than one that
+   * is briefly late.
+   */
+  function receive(payload) {
+    if (!payload?._id) return;
+    if (items.value.some((n) => String(n._id) === String(payload._id))) return;
+
+    items.value = [{ ...payload, read: false }, ...items.value];
+    total.value += 1;
+    unread.value += 1;
+  }
+
+  return {
+    unread, items, total, pages, loading,
+    fetchUnread, fetchPage, markRead, startPolling, stopPolling, receive
+  };
 });

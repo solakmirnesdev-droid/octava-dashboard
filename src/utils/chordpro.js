@@ -107,10 +107,22 @@ export function parseSong(content) {
   if (!content) return [];
 
   return content.split('\n').map((line) => {
-    // A line that is only a section marker becomes a heading rather than a row.
-    const heading = line.trim().match(/^\[([^\]]+)\]$/);
+    /**
+     * A section marker becomes a heading rather than a row.
+     *
+     * AI-TRAP: the bracket is not always the whole line. Charts written by hand
+     * carry a repeat count or a colon after it — "[Refren] (2x)", "[Outro]:",
+     * "[Prelaz / Solo]:" — and an anchored /^\[..\]$/ matched none of them, so
+     * they rendered as ordinary lyric rows with a stray bracket in them.
+     *
+     * The trailing part is allowed only as a colon or a parenthesised note, and
+     * kept rather than discarded: "(2x)" is an instruction to the player, not
+     * decoration. Anything else after the bracket means the line is lyrics that
+     * happen to start with one, and it falls through.
+     */
+    const heading = line.trim().match(/^\[([^\]]+)\]\s*:?\s*(\([^)]*\))?\s*:?\s*$/);
     if (heading && !isChord(heading[1])) {
-      return { type: 'section', label: heading[1] };
+      return { type: 'section', label: heading[1].trim(), note: (heading[2] || '').trim() };
     }
 
     const segments = [];

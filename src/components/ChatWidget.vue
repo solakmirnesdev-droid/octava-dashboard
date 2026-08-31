@@ -148,11 +148,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="fixed bottom-5 right-5 z-50 font-sans">
-    <!-- Floating Popup Window -->
+  <div
+    class="chat-widget-root fixed bottom-14 right-3.5 sm:bottom-5 sm:right-5 z-40 font-sans transition-all duration-200"
+    data-chat-widget-root
+  >
+    <!-- Floating Popup Window (Full screen on mobile, floating card on desktop) -->
     <div
       v-if="open"
-      class="mb-3 w-[22rem] sm:w-[25rem] h-[32rem] max-h-[calc(100vh-6rem)] rounded-2xl border border-line-strong bg-panel shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4 duration-200"
+      class="fixed inset-0 sm:relative sm:inset-auto mb-0 sm:mb-3 w-full h-full sm:w-[25rem] sm:h-[32rem] sm:max-h-[calc(100vh-6rem)] rounded-none sm:rounded-2xl border-0 sm:border border-line-strong bg-panel shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4 duration-200 z-50"
     >
       <!-- HEADER: ACTIVE THREAD -->
       <header
@@ -179,7 +182,7 @@ onMounted(() => {
             </div>
             <span
               class="absolute -bottom-0.5 -right-0.5 size-2 rounded-full ring-2 ring-panel"
-              :class="isOnline(active._id) ? 'bg-emerald-500' : 'bg-line-strong'"
+              :class="isOnline(active._id) ? 'bg-ok' : 'bg-line-strong'"
             />
           </div>
 
@@ -194,7 +197,7 @@ onMounted(() => {
                 {{ active.role }}
               </span>
             </div>
-            <span class="text-[10px]" :class="isOnline(active._id) ? 'text-emerald-500 font-medium' : 'text-muted'">
+            <span class="text-[10px]" :class="isOnline(active._id) ? 'text-ok font-medium' : 'text-muted'">
               {{ isOnline(active._id) ? 'na vezi' : 'nije na vezi' }}
             </span>
           </div>
@@ -219,7 +222,7 @@ onMounted(() => {
           <h3 class="text-xs font-bold text-ink">Urednički Chat</h3>
           <span
             class="size-2 rounded-full"
-            :class="connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'"
+            :class="connected ? 'bg-ok animate-pulse' : 'bg-warn'"
             :title="connected ? 'Povezan' : 'Spajanje…'"
           />
         </div>
@@ -273,7 +276,7 @@ onMounted(() => {
               >
                 <span>{{ day(m.createdAt) }} {{ time(m.createdAt) }}</span>
                 <template v-if="m.from === me">
-                  <IconCheckDouble v-if="m.readAt" class="text-xs text-emerald-300" title="Pročitano" />
+                  <IconCheckDouble v-if="m.readAt" class="text-xs text-ok" title="Pročitano" />
                   <IconCheck v-else class="text-xs opacity-75" title="Poslano" />
                 </template>
               </div>
@@ -417,7 +420,7 @@ onMounted(() => {
                 </div>
                 <span
                   class="absolute -bottom-0.5 -right-0.5 size-2 rounded-full ring-2 ring-panel"
-                  :class="isOnline(peer._id) ? 'bg-emerald-500' : 'bg-line-strong'"
+                  :class="isOnline(peer._id) ? 'bg-ok' : 'bg-line-strong'"
                 />
               </div>
 
@@ -460,22 +463,35 @@ onMounted(() => {
     <!-- Floating Chat Trigger Button -->
     <button
       type="button"
-      class="group relative flex items-center gap-2 rounded-full border border-line-strong bg-ink px-4 py-2.5 text-xs font-semibold text-on-ink shadow-2xl transition-all duration-200 hover:bg-accent hover:scale-105 active:scale-95"
+      class="group relative flex items-center gap-2 rounded-full border border-line-strong bg-ink px-4 py-2.5 text-xs font-semibold text-on-ink shadow-2xl transition-all duration-200 hover:bg-accent hover:scale-105 active:scale-95 cursor-pointer"
+      :class="totalUnread ? 'ring-2 ring-accent ring-offset-2 ring-offset-panel shadow-accent/20' : ''"
       @click="toggleWidget"
     >
+      <!-- Pulsing halo when there are unread messages -->
+      <span
+        v-if="totalUnread"
+        class="absolute -inset-1 rounded-full bg-accent/40 animate-pulse-halo pointer-events-none"
+      />
+
       <IconChat class="text-base text-accent group-hover:text-on-ink transition-colors" />
       <span>Chat</span>
 
       <!-- Online live dot -->
-      <span
-        class="size-2 rounded-full"
-        :class="connected ? 'bg-emerald-400' : 'bg-amber-400'"
-      />
+      <span class="relative flex size-2">
+        <span
+          v-if="connected"
+          class="absolute inline-flex h-full w-full rounded-full bg-ok opacity-75 animate-ping"
+        />
+        <span
+          class="relative inline-flex size-2 rounded-full"
+          :class="connected ? 'bg-ok' : 'bg-warn'"
+        />
+      </span>
 
       <!-- Unread message counter badge -->
       <span
         v-if="totalUnread"
-        class="flex size-5 items-center justify-center rounded-full bg-accent text-on-accent text-[10px] font-bold shadow-xs animate-bounce"
+        class="flex size-5 items-center justify-center rounded-full bg-accent text-on-accent text-[10px] font-bold shadow-xs animate-badge-pop"
       >
         {{ totalUnread }}
       </span>

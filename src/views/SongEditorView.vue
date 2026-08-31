@@ -1,16 +1,21 @@
 <script setup>
-import { ref, computed, watch, onMounted, useTemplateRef } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, useTemplateRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import client from '../api/client';
 import ChordSheet from '../components/ChordSheet.vue';
 import ImportPanel from '../components/ImportPanel.vue';
 import ChordLineEditor from '../components/ChordLineEditor.vue';
+import FontSizeControl from '../components/FontSizeControl.vue';
 import ArrangementsPanel from '../components/ArrangementsPanel.vue';
 import { extractChords, transposeContent, transposeChord } from '../utils/chordpro';
 import { useToasts } from '../composables/useToasts';
+import { useSheetFontSize } from '../composables/useSheetFontSize';
 import IconDraft from '~icons/material-symbols/save-rounded';
 import IconPublish from '~icons/material-symbols/publish-rounded';
 import IconImage from '~icons/material-symbols/image-outline-rounded';
+import IconPlay from '~icons/material-symbols/play-circle-outline-rounded';
+import IconMusic from '~icons/material-symbols/music-note-rounded';
+import IconCheck from '~icons/material-symbols/check-circle-rounded';
 
 const props = defineProps({ id: { type: String, default: null } });
 const router = useRouter();
@@ -18,6 +23,7 @@ const route = useRoute();
 const editor = useTemplateRef('editor');
 const importPanelRef = ref(null);
 const toasts = useToasts();
+const { fontSize } = useSheetFontSize();
 
 /**
  * AI-TRAP: our notation, not the American one. H is the twelfth degree and
@@ -43,15 +49,16 @@ const KNOWN_TAGS = [
 
 const form = ref({
   title: '', artist: '', originalKey: 'Am', capo: 0, year: null,
-  difficulty: 'medium', tags: [], genres: [], content: '', status: 'draft'
+  difficulty: 'medium', tags: [], genres: [], content: '', status: 'draft',
+  youtube: ''
 });
 const genres = ref([]);
 const newTag = ref('');
-// Visual placement is the default; the raw view stays for bulk paste and for
-// fixing anything the click editor cannot express.
 const mode = ref('visual');
+const mobileTab = ref('editor');
 const saving = ref(false);
 const error = ref(null);
+const showPlayer = ref(false);
 
 const transposeSemitones = ref(0);
 
@@ -66,6 +73,54 @@ const previewContent = computed(() => {
 });
 
 const usedChords = computed(() => extractChords(form.value.content));
+
+const youtubeEmbedUrl = computed(() => {
+  const yt = form.value.youtube || '';
+  if (!yt) return null;
+  const match = yt.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  return match ? `https://www.youtube-nocookie.com/embed/${match[1]}?rel=0` : null;
+});
+
+const songStats = computed(() => {
+  const content = form.value.content || '';
+  const lines = content.split('\n');
+  const nonBlankLines = lines.filter((l) => l.trim().length > 0 && !l.trim().startsWith('['));
+  const plainText = content.replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = plainText ? plainText.split(/\s+/).length : 0;
+  const chords = extractChords(content);
+  const estMins = Math.floor(words / 130);
+  const estSecs = String(Math.round(((words % 130) / 130) * 60)).padStart(2, '0');
+  return {
+    linesCount: nonBlankLines.length,
+    wordsCount: words,
+    chordsCount: chords.length,
+    uniqueChords: [...new Set(chords)].length,
+    estDuration: `~${estMins}:${estSecs} min`
+  };
+});
+
+function applyPermanentTranspose() {
+  if (transposeSemitones.value === 0) return;
+  form.value.content = previewContent.value;
+  form.value.originalKey = previewKey.value;
+  toasts.success(`Trajno transponovano u tonalitet ${form.value.originalKey}`);
+  transposeSemitones.value = 0;
+}
+
+function handleEditorKeydown(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    save(form.value.status || 'draft');
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleEditorKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleEditorKeydown);
+});
 
 /** Kept beside the form rather than inside it: the panel owns these. */
 const arrangements = ref([]);
@@ -231,74 +286,135 @@ async function save(status) {
 </script>
 
 <template>
-  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-    <div class="flex items-center gap-3">
-      <h1 class="text-lg font-semibold tracking-tight">
+  <!-- Top Header / Desktop Action Bar -->
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-2.5">
+    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+      <h1 class="text-base sm:text-lg font-bold tracking-tight text-ink">
         {{ props.id ? 'Uredi pjesmu' : 'Nova pjesma' }}
       </h1>
+
+      <!-- Real-time Song Statistics Metric Pill -->
+      <div class="hidden sm:flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1 text-[11px] text-muted shadow-2xs">
+        <span class="font-bold text-accent">{{ form.originalKey }}</span>
+        <span>·</span>
+        <span>{{ songStats.linesCount }} stihova</span>
+        <span>·</span>
+        <span>{{ songStats.wordsCount }} riječi</span>
+        <span>·</span>
+        <span>{{ songStats.estDuration }}</span>
+        <span>·</span>
+        <span class="font-semibold text-accent">{{ songStats.uniqueChords }} akorda</span>
+      </div>
+
       <ImportPanel ref="importPanelRef" @imported="applyImport" />
-    </div>
-    <div class="flex items-center gap-2">
+      <FontSizeControl />
+
       <button
-        class="rounded border border-line-strong px-3 py-1 text-xs text-muted hover:border-accent hover:text-ink transition"
-        :disabled="saving" @click="save('draft')"
+        v-if="youtubeEmbedUrl"
+        type="button"
+        class="hidden sm:flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition cursor-pointer shadow-2xs"
+        :class="showPlayer
+          ? 'border-accent bg-accent-soft text-accent'
+          : 'border-line-strong bg-panel text-muted hover:border-accent hover:text-ink'"
+        @click="showPlayer = !showPlayer"
       >
-        <span class="flex items-center gap-1.5"><IconDraft /> Sačuvaj skicu</span>
+        <IconPlay class="text-sm text-accent" />
+        <span>{{ showPlayer ? 'Sakrij video' : 'Audio vodilica' }}</span>
+      </button>
+    </div>
+
+    <div class="hidden lg:flex items-center gap-2">
+      <button
+        class="rounded-lg border border-line-strong bg-panel px-3 py-1.5 text-xs font-medium text-muted hover:border-accent hover:text-ink transition cursor-pointer shadow-2xs"
+        :disabled="saving"
+        title="Prečica: Cmd+S / Ctrl+S"
+        @click="save('draft')"
+      >
+        <span class="flex items-center gap-1.5"><IconDraft class="text-sm" /> Sačuvaj skicu <kbd class="text-[10px] text-faint">⌘S</kbd></span>
       </button>
       <button
-        class="rounded bg-accent px-4 py-1 text-xs font-semibold text-on-accent hover:brightness-110 disabled:opacity-50 transition shadow-xs"
-        :disabled="saving" @click="save('published')"
+        class="rounded-lg bg-accent px-4 py-1.5 text-xs font-bold text-on-accent hover:brightness-110 disabled:opacity-50 transition shadow-xs cursor-pointer active:scale-95"
+        :disabled="saving"
+        @click="save('published')"
       >
         <span class="flex items-center gap-1.5">
-          <IconPublish /> {{ saving ? 'Spašavanje…' : 'Objavi' }}
+          <IconPublish class="text-sm" /> {{ saving ? 'Spašavanje…' : 'Objavi' }}
         </span>
       </button>
     </div>
   </div>
 
-  <p v-if="error" class="mb-3 rounded bg-accent-soft px-3 py-1.5 text-xs text-accent">{{ error }}</p>
+  <!-- Collapsible YouTube Audio/Video Companion Player -->
+  <div
+    v-if="showPlayer && youtubeEmbedUrl"
+    class="mb-3 rounded-2xl border border-line bg-panel p-3 shadow-md animate-in fade-in duration-200"
+  >
+    <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-line-soft">
+      <span class="text-xs font-bold text-ink flex items-center gap-1.5">
+        <IconPlay class="text-accent" /> Audio vodilica za usklađivanje akorda
+      </span>
+      <button
+        type="button"
+        class="text-xs text-muted hover:text-ink cursor-pointer p-0.5"
+        @click="showPlayer = false"
+      >
+        ✕ Zatvori
+      </button>
+    </div>
+    <div class="aspect-video max-h-56 w-full max-w-xl mx-auto rounded-xl overflow-hidden shadow-inner bg-black">
+      <iframe
+        :src="youtubeEmbedUrl"
+        class="w-full h-full border-0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+      />
+    </div>
+  </div>
 
-  <div class="mb-3.5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-6 text-xs">
-    <label class="block lg:col-span-2">
+  <p v-if="error" class="mb-3 rounded-lg bg-accent-soft px-3 py-2 text-xs font-medium text-accent border border-accent/30">{{ error }}</p>
+
+  <!-- Metadata Form Grid -->
+  <div class="mb-3.5 grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 text-xs">
+    <label class="block col-span-2 sm:col-span-2 lg:col-span-2">
       <span class="font-medium text-muted">Naslov</span>
-      <input v-model="form.title" class="mt-1 w-full rounded border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent" />
+      <input v-model="form.title" class="mt-1 w-full rounded-lg border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent shadow-2xs" />
     </label>
-    <label class="block lg:col-span-2">
+    <label class="block col-span-2 sm:col-span-1 lg:col-span-2">
       <span class="font-medium text-muted">Izvođač</span>
-      <input v-model="form.artist" class="mt-1 w-full rounded border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent" />
+      <input v-model="form.artist" class="mt-1 w-full rounded-lg border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent shadow-2xs" />
     </label>
-    <label class="block lg:col-span-1">
+    <label class="block col-span-1 lg:col-span-1">
       <span class="font-medium text-muted">Tonalitet</span>
-      <select v-model="form.originalKey" class="mt-1 w-full rounded border border-line-strong bg-panel px-2 py-1.5 text-xs outline-none focus:border-accent font-mono font-semibold">
+      <select v-model="form.originalKey" class="mt-1 w-full rounded-lg border border-line-strong bg-panel px-2 py-1.5 text-xs outline-none focus:border-accent font-mono font-bold text-accent shadow-2xs">
         <option v-for="key in KEYS" :key="key">{{ key }}</option>
       </select>
     </label>
-    <label class="block lg:col-span-1">
+    <label class="block col-span-1 lg:col-span-1">
       <span class="font-medium text-muted">Kapodaster</span>
       <input v-model.number="form.capo" type="number" min="0" max="12"
-             class="mt-1 w-full rounded border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent font-mono" />
+             class="mt-1 w-full rounded-lg border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent font-mono shadow-2xs" />
     </label>
 
-    <label class="block lg:col-span-1">
+    <label class="block col-span-1 lg:col-span-1">
       <span class="font-medium text-muted">Težina</span>
-      <select v-model="form.difficulty" class="mt-1 w-full rounded border border-line-strong bg-panel px-2 py-1.5 text-xs outline-none focus:border-accent">
+      <select v-model="form.difficulty" class="mt-1 w-full rounded-lg border border-line-strong bg-panel px-2 py-1.5 text-xs outline-none focus:border-accent shadow-2xs">
         <option v-for="d in DIFFICULTIES" :key="d.value" :value="d.value">{{ d.label }}</option>
       </select>
     </label>
 
-    <label class="block lg:col-span-1">
+    <label class="block col-span-1 lg:col-span-1">
       <span class="font-medium text-muted">Godina <span class="font-normal text-faint">(opc.)</span></span>
       <input v-model.number="form.year" type="number" min="1900" :max="new Date().getFullYear() + 1"
              placeholder="npr. 1974"
-             class="mt-1 w-full rounded border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent font-mono" />
+             class="mt-1 w-full rounded-lg border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent font-mono shadow-2xs" />
     </label>
 
-    <label class="block lg:col-span-4">
+    <label class="block col-span-2 sm:col-span-3 lg:col-span-4">
       <span class="font-medium text-muted">YouTube link <span class="font-normal text-faint">(opciono)</span></span>
       <input
         v-model="form.youtube"
         placeholder="youtube.com/watch?v=… ili youtu.be/…"
-        class="mt-1 w-full rounded border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent"
+        class="mt-1 w-full rounded-lg border border-line-strong bg-panel px-2.5 py-1.5 text-xs outline-none focus:border-accent shadow-2xs"
       >
     </label>
   </div>
@@ -310,16 +426,17 @@ async function save(status) {
     @changed="onArrangementsChanged"
   />
 
-  <div class="mb-3.5 grid gap-3 sm:grid-cols-2 rounded border border-line-soft bg-panel/40 p-2.5 text-xs">
+  <!-- Genres and Tags Box -->
+  <div class="mb-3.5 grid gap-3 sm:grid-cols-2 rounded-xl border border-line-soft bg-panel/50 p-3 text-xs shadow-2xs">
     <div>
-      <span class="font-semibold uppercase tracking-wider text-muted text-[10px]">Rubrike</span>
-      <div class="mt-1 flex flex-wrap gap-1">
+      <span class="font-bold uppercase tracking-wider text-muted text-[10px]">Rubrike</span>
+      <div class="mt-1.5 flex flex-wrap gap-1">
         <button
           v-for="genre in genres" :key="genre._id"
           type="button"
-          class="rounded-full border px-2.5 py-0.5 text-xs transition"
+          class="rounded-full border px-2.5 py-0.5 text-xs transition cursor-pointer font-medium"
           :class="form.genres.includes(genre.slug)
-            ? 'border-accent bg-accent-soft text-accent'
+            ? 'border-accent bg-accent-soft text-accent font-bold shadow-2xs'
             : 'border-line-strong text-muted hover:border-accent'"
           @click="toggleGenre(genre.slug)"
         >
@@ -329,14 +446,14 @@ async function save(status) {
     </div>
 
     <div>
-      <span class="font-semibold uppercase tracking-wider text-muted text-[10px]">Tagovi</span>
-      <div class="mt-1 flex flex-wrap items-center gap-1">
+      <span class="font-bold uppercase tracking-wider text-muted text-[10px]">Tagovi</span>
+      <div class="mt-1.5 flex flex-wrap items-center gap-1">
         <button
           v-for="t in KNOWN_TAGS" :key="t.key"
           type="button"
-          class="rounded-full border px-2.5 py-0.5 text-xs transition"
+          class="rounded-full border px-2.5 py-0.5 text-xs transition cursor-pointer font-medium"
           :class="(form.tags || []).includes(t.key)
-            ? 'border-accent bg-accent-soft text-accent'
+            ? 'border-accent bg-accent-soft text-accent font-bold shadow-2xs'
             : 'border-line-strong text-muted hover:border-accent'"
           @click="toggleTag(t.key)"
         >
@@ -345,10 +462,10 @@ async function save(status) {
 
         <span
           v-for="t in (form.tags || []).filter((x) => !KNOWN_TAGS.some((k) => k.key === x))" :key="t"
-          class="inline-flex items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-0.5 text-xs text-accent"
+          class="inline-flex items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-0.5 text-xs text-accent font-bold"
         >
           {{ t }}
-          <button type="button" class="text-xs hover:opacity-75" @click="removeTag(t)">×</button>
+          <button type="button" class="text-xs hover:opacity-75 cursor-pointer" @click="removeTag(t)">×</button>
         </span>
 
         <div class="flex items-center gap-1">
@@ -356,12 +473,12 @@ async function save(status) {
             v-model="newTag"
             type="text"
             placeholder="novi tag…"
-            class="w-20 rounded border border-line-strong bg-panel px-2 py-0.5 text-xs outline-none focus:border-accent"
+            class="w-20 rounded-lg border border-line-strong bg-panel px-2 py-0.5 text-xs outline-none focus:border-accent shadow-2xs"
             @keyup.enter.prevent="addCustomTag"
           />
           <button
             type="button"
-            class="rounded border border-line-strong px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-accent"
+            class="rounded-lg border border-line-strong px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-accent cursor-pointer transition"
             @click="addCustomTag"
           >Dodaj</button>
         </div>
@@ -369,37 +486,62 @@ async function save(status) {
     </div>
   </div>
 
-  <div class="grid gap-5 lg:grid-cols-2">
-    <!-- Left Column: Editor -->
-    <div class="flex flex-col">
-      <div class="mb-2 flex items-center justify-between">
+  <!-- Mobile Segment Switcher (< lg) -->
+  <div class="lg:hidden mb-3 flex items-center rounded-xl bg-panel border border-line p-1 shadow-xs text-xs font-semibold">
+    <button
+      type="button"
+      class="flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
+      :class="mobileTab === 'editor' ? 'bg-ink text-on-ink shadow-xs' : 'text-muted hover:text-ink'"
+      @click="mobileTab = 'editor'"
+    >
+      <span>✏️ Uređivač</span>
+      <span class="text-[10px] font-mono opacity-70">({{ usedChords.length }} akorda)</span>
+    </button>
+    <button
+      type="button"
+      class="flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
+      :class="mobileTab === 'preview' ? 'bg-ink text-on-ink shadow-xs' : 'text-muted hover:text-ink'"
+      @click="mobileTab = 'preview'"
+    >
+      <span>👁️ Pregled uživo</span>
+      <span v-if="previewKey" class="text-[10px] font-mono text-accent font-bold">({{ previewKey }})</span>
+    </button>
+  </div>
+
+  <!-- Dual Workspace Grid -->
+  <div class="grid gap-5 lg:grid-cols-2 pb-12 lg:pb-0">
+    <!-- Left Column: Editor (Active on lg OR when mobileTab === 'editor') -->
+    <div class="flex flex-col" :class="{ 'hidden lg:flex': mobileTab !== 'editor' }">
+      <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2">
-          <span class="text-sm font-semibold">Tekst i akordi</span>
-          <span class="text-[11px] text-faint">({{ usedChords.length }} akorda)</span>
+          <span class="text-sm font-bold text-ink">Tekst i akordi</span>
+          <span class="text-[11px] font-mono text-faint">({{ usedChords.length }} akorda)</span>
         </div>
 
         <div class="flex items-center gap-2">
+          <FontSizeControl />
+
           <button
             type="button"
-            class="flex items-center gap-1 rounded border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted transition hover:border-accent hover:text-ink"
+            class="flex items-center gap-1 rounded-xl border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted transition hover:border-accent hover:text-ink shadow-2xs cursor-pointer"
             title="Učitaj sliku ili skeniraj akorde"
             @click="importPanelRef?.openWithImage()"
           >
             <IconImage class="text-xs text-accent" />
-            <span>Učitaj sliku</span>
+            <span class="hidden sm:inline">Učitaj sliku</span>
           </button>
 
-          <div class="flex items-center gap-1 rounded border border-line-strong bg-panel p-0.5 text-xs shadow-2xs">
+          <div class="flex items-center gap-1 rounded-xl border border-line-strong bg-panel p-0.5 text-xs shadow-2xs">
             <button
-              type="button" class="rounded px-2.5 py-1 transition"
-              :class="mode === 'visual' ? 'bg-ink font-semibold text-on-ink shadow-xs' : 'text-muted hover:text-ink'"
+              type="button" class="rounded-lg px-2.5 py-1 transition cursor-pointer"
+              :class="mode === 'visual' ? 'bg-ink font-bold text-on-ink shadow-xs' : 'text-muted hover:text-ink'"
               @click="mode = 'visual'"
             >Vizuelno</button>
             <button
-              type="button" class="rounded px-2.5 py-1 transition"
-              :class="mode === 'raw' ? 'bg-ink font-semibold text-on-ink shadow-xs' : 'text-muted hover:text-ink'"
+              type="button" class="rounded-lg px-2.5 py-1 transition cursor-pointer"
+              :class="mode === 'raw' ? 'bg-ink font-bold text-on-ink shadow-xs' : 'text-muted hover:text-ink'"
               @click="mode = 'raw'"
-            >Tekst</button>
+            >Sirovo</button>
           </div>
         </div>
       </div>
@@ -407,7 +549,7 @@ async function save(status) {
       <!-- Raw Mode Quick Formatting Toolbar -->
       <div
         v-if="mode === 'raw'"
-        class="mb-2 flex flex-wrap items-center justify-between gap-1.5 rounded-lg border border-line-soft bg-raised/50 p-1.5 text-xs"
+        class="mb-2 flex flex-wrap items-center justify-between gap-1.5 rounded-xl border border-line-soft bg-raised/50 p-1.5 text-xs"
       >
         <div class="flex flex-wrap items-center gap-1">
           <span class="text-[10px] text-faint font-semibold uppercase tracking-wider px-1">Umetni:</span>
@@ -415,14 +557,14 @@ async function save(status) {
             v-for="sec in ['Uvod', 'Strofa', 'Refren', 'Solo', 'Kraj']"
             :key="sec"
             type="button"
-            class="rounded border border-line-strong bg-panel px-2 py-0.5 text-[11px] text-muted hover:border-accent hover:text-accent transition"
+            class="rounded-lg border border-line-strong bg-panel px-2 py-0.5 text-[11px] text-muted hover:border-accent hover:text-accent transition cursor-pointer"
             @click="insertSection(sec)"
           >
             [{{ sec }}]
           </button>
           <button
             type="button"
-            class="rounded border border-accent bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent hover:text-on-accent transition"
+            class="rounded-lg border border-accent bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent hover:text-on-accent transition cursor-pointer"
             title="Prečica: Cmd+K / Ctrl+K"
             @click="insertChordMarker"
           >
@@ -436,7 +578,7 @@ async function save(status) {
             v-for="c in usedChords"
             :key="c"
             type="button"
-            class="rounded bg-panel border border-line px-1.5 py-0.5 text-[11px] font-mono font-bold text-accent hover:border-accent hover:bg-accent hover:text-on-accent transition shadow-2xs"
+            class="rounded-lg bg-panel border border-line px-1.5 py-0.5 text-[11px] font-mono font-bold text-accent hover:border-accent hover:bg-accent hover:text-on-accent transition shadow-2xs cursor-pointer"
             @click="insertChord(c)"
           >
             {{ c }}
@@ -447,7 +589,7 @@ async function save(status) {
       <!-- Visual vs Raw Editor -->
       <div
         v-if="mode === 'visual'"
-        class="h-[30rem] overflow-auto rounded-xl border border-line-strong bg-panel p-4 shadow-sm"
+        class="h-[34rem] overflow-auto rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm"
       >
         <ChordLineEditor v-model:content="form.content" />
       </div>
@@ -457,8 +599,9 @@ async function save(status) {
         ref="editor"
         v-model="form.content"
         spellcheck="false"
+        :style="{ fontSize: fontSize + 'px' }"
         placeholder="[Am]prvi stih ide [F]ovdje&#10;[C]drugi stih ide [G]ovdje&#10;&#10;[Refren]&#10;[Am]tekst refrena"
-        class="h-[30rem] w-full resize-none rounded-xl border border-line-strong bg-panel p-4 font-mono text-[14px] leading-relaxed outline-none focus:border-accent shadow-sm"
+        class="h-[34rem] w-full resize-none rounded-2xl border border-line-strong bg-panel p-4 sm:p-5 font-mono font-semibold text-ink leading-relaxed outline-none focus:border-accent focus:bg-surface/30 transition-all shadow-sm"
         @keydown.meta.k.prevent="insertChordMarker"
         @keydown.ctrl.k.prevent="insertChordMarker"
       />
@@ -466,7 +609,7 @@ async function save(status) {
       <p class="mt-2 text-xs text-faint flex items-center justify-between">
         <span>
           <template v-if="mode === 'visual'">
-            Kliknite iznad riječi da dodate akord, ili prevucite postojeći akord horizontalno.
+            Kliknite iznad riječi da dodate akord, ili prevucite postojeći akord po traci.
           </template>
           <template v-else>
             Akordi se pišu u uglastim zagradama [Am] tačno na slogu gdje se mijenjaju.
@@ -476,61 +619,96 @@ async function save(status) {
       </p>
     </div>
 
-    <!-- Right Column: Live Rendered Preview with Transpose Controls -->
-    <div class="flex flex-col">
-      <div class="mb-2 flex items-center justify-between">
+    <!-- Right Column: Live Rendered Preview with Transpose Controls (Active on lg OR when mobileTab === 'preview') -->
+    <div class="flex flex-col" :class="{ 'hidden lg:flex': mobileTab !== 'preview' }">
+      <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2">
-          <span class="text-sm font-semibold">Pregled uživo</span>
+          <span class="text-sm font-bold text-ink">Pregled uživo</span>
           <span v-if="usedChords.length" class="flex flex-wrap gap-1">
             <code
-              v-for="chord in usedChords" :key="chord"
-              class="rounded bg-accent-soft px-1.5 py-0.5 text-xs font-bold text-accent"
+              v-for="chord in usedChords.slice(0, 5)" :key="chord"
+              class="rounded-md bg-accent-soft px-1.5 py-0.2 text-[11px] font-bold font-mono text-accent"
             >{{ chord }}</code>
           </span>
         </div>
 
-        <!-- Transposition Stepper Controls -->
-        <div class="flex items-center gap-1.5 rounded-lg border border-line-strong bg-panel px-2 py-0.5 text-xs shadow-2xs">
-          <span class="text-[11px] text-faint">Transponuj:</span>
-          <button
-            type="button"
-            class="flex size-5 items-center justify-center rounded border border-line text-muted hover:border-accent hover:text-ink transition font-bold"
-            title="-1 polustepen"
-            @click="transposeSemitones--"
-          >
-            -
-          </button>
+        <div class="flex items-center gap-2">
+          <FontSizeControl />
 
-          <span class="font-mono font-bold text-accent min-w-[2.5rem] text-center text-xs">
-            {{ previewKey }}
-            <span v-if="transposeSemitones !== 0" class="text-[10px] font-normal text-muted">
-              ({{ transposeSemitones > 0 ? '+' : '' }}{{ transposeSemitones }})
+          <!-- Transposition Stepper Controls -->
+          <div class="flex items-center gap-1.5 rounded-xl border border-line-strong bg-panel px-2.5 py-1 text-xs shadow-2xs">
+            <span class="text-[11px] text-faint">Transponuj:</span>
+            <button
+              type="button"
+              class="flex size-5 items-center justify-center rounded-lg border border-line text-muted hover:border-accent hover:text-ink transition font-bold cursor-pointer"
+              title="-1 polustepen"
+              @click="transposeSemitones--"
+            >
+              -
+            </button>
+
+            <span class="font-mono font-bold text-accent min-w-[2.5rem] text-center text-xs">
+              {{ previewKey }}
+              <span v-if="transposeSemitones !== 0" class="text-[10px] font-normal text-muted">
+                ({{ transposeSemitones > 0 ? '+' : '' }}{{ transposeSemitones }})
+              </span>
             </span>
-          </span>
 
-          <button
-            type="button"
-            class="flex size-5 items-center justify-center rounded border border-line text-muted hover:border-accent hover:text-ink transition font-bold"
-            title="+1 polustepen"
-            @click="transposeSemitones++"
-          >
-            +
-          </button>
+            <button
+              type="button"
+              class="flex size-5 items-center justify-center rounded-lg border border-line text-muted hover:border-accent hover:text-ink transition font-bold cursor-pointer"
+              title="+1 polustepen"
+              @click="transposeSemitones++"
+            >
+              +
+            </button>
 
-          <button
-            v-if="transposeSemitones !== 0"
-            type="button"
-            class="text-[10px] text-faint hover:text-accent underline ml-1"
-            @click="transposeSemitones = 0"
-          >
-            Reset
-          </button>
+            <button
+              v-if="transposeSemitones !== 0"
+              type="button"
+              class="text-[10px] text-faint hover:text-accent underline ml-1 cursor-pointer"
+              @click="transposeSemitones = 0"
+            >
+              Reset
+            </button>
+
+            <button
+              v-if="transposeSemitones !== 0"
+              type="button"
+              class="flex items-center gap-1 rounded-lg bg-accent px-2 py-0.5 text-[10px] font-bold text-on-accent hover:brightness-110 ml-1 transition shadow-xs cursor-pointer"
+              title="Trajno primijeni ovaj tonalitet na stihove i akorde pjesme"
+              @click="applyPermanentTranspose"
+            >
+              <IconCheck class="text-xs" /> Primijeni
+            </button>
+          </div>
         </div>
       </div>
 
-      <div class="h-[30rem] overflow-auto rounded-xl border border-line bg-panel p-4 shadow-sm">
+      <div class="h-[34rem] overflow-auto rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm">
         <ChordSheet :content="previewContent" :original-key="previewKey" />
       </div>
     </div>
+  </div>
+
+  <!-- Sticky Mobile Save & Publish Bar (< lg) -->
+  <div class="lg:hidden fixed bottom-12 left-0 right-0 z-20 bg-panel/95 backdrop-blur-md border-t border-line px-3.5 py-2 flex items-center justify-between gap-2.5 shadow-2xl">
+    <button
+      type="button"
+      class="flex-1 rounded-lg border border-line-strong bg-surface/80 py-2 text-xs font-semibold text-muted hover:border-accent hover:text-ink active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+      :disabled="saving"
+      @click="save('draft')"
+    >
+      <IconDraft class="text-sm" /> <span>Sačuvaj skicu</span>
+    </button>
+
+    <button
+      type="button"
+      class="flex-1 rounded-lg bg-accent py-2 text-xs font-bold text-on-accent hover:brightness-110 active:scale-95 transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+      :disabled="saving"
+      @click="save('published')"
+    >
+      <IconPublish class="text-sm" /> <span>{{ saving ? 'Spašavanje…' : 'Objavi' }}</span>
+    </button>
   </div>
 </template>

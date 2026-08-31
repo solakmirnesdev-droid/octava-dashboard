@@ -10,6 +10,9 @@ import IconVote from '~icons/material-symbols/thumb-up-outline-rounded';
 import IconRead from '~icons/material-symbols/mark-email-read-outline-rounded';
 import IconBug from '~icons/material-symbols/bug-report-outline-rounded';
 import IconPerson from '~icons/material-symbols/person-add-outline-rounded';
+import IconNotifications from '~icons/material-symbols/notifications-outline-rounded';
+import IconPrev from '~icons/material-symbols/chevron-left-rounded';
+import IconNext from '~icons/material-symbols/chevron-right-rounded';
 import { initials, avatarStyle } from '../utils/avatar';
 
 const store = useNotificationsStore();
@@ -31,17 +34,17 @@ const KINDS = {
 const kind = (type) => KINDS[type] || { icon: IconReview, label: type, tone: 'accent' };
 
 const TONE_CHIP = {
-  accent: 'bg-accent-soft text-accent',
-  ok: 'bg-ok-soft text-ok',
-  danger: 'bg-danger-soft text-danger'
+  accent: 'bg-accent-soft text-accent border border-accent/20',
+  ok: 'bg-ok-soft text-ok border border-ok/20',
+  danger: 'bg-danger-soft text-danger border border-danger/20'
 };
 
 async function load() {
   await store.fetchPage({ page: page.value, unreadOnly: unreadOnly.value });
 }
 
-async function toggleFilter() {
-  unreadOnly.value = !unreadOnly.value;
+async function toggleFilter(unread) {
+  unreadOnly.value = unread;
   page.value = 1;
   await load();
 }
@@ -52,7 +55,7 @@ async function markAll() {
   if (unreadOnly.value) await load();
 }
 
-const when = (iso) => new Date(iso).toLocaleString('bs');
+const when = (iso) => (iso ? new Date(iso).toLocaleString('bs') : '—');
 
 /** Route to open when clicking the notification card. */
 function targetRoute(n) {
@@ -98,100 +101,144 @@ onMounted(load);
 </script>
 
 <template>
-  <section>
-    <header class="mb-6 flex flex-wrap items-center gap-3">
-      <h1 class="text-xl font-semibold tracking-tight">Inbox</h1>
-      <span v-if="store.unread" class="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-on-accent">
-        {{ store.unread }} novo
-      </span>
+  <section class="pb-16 sm:pb-8">
+    <!-- Top Header -->
+    <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-xl sm:text-2xl font-black tracking-tight text-ink">
+          Obavijesti i inbox
+        </h1>
+        <p class="text-xs text-muted mt-0.5">
+          Sve aktivnosti čitalaca, prijave grešaka, komentari i novi zahtjevi.
+        </p>
+      </div>
 
-      <div class="ml-auto flex items-center gap-2">
-        <button
-          class="rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent hover:text-accent"
-          :class="unreadOnly ? 'border-accent bg-accent text-on-accent hover:text-on-accent' : ''"
-          @click="toggleFilter"
-        >{{ unreadOnly ? 'Samo nepročitano' : 'Sve' }}</button>
+      <button
+        type="button"
+        class="flex items-center gap-1.5 rounded-xl bg-ink px-3.5 py-2 text-xs sm:text-sm font-bold text-on-ink hover:bg-accent transition shadow-md active:scale-95 cursor-pointer disabled:opacity-40"
+        :disabled="!store.unread"
+        @click="markAll"
+      >
+        <IconRead class="text-base" />
+        <span>Označi sve pročitanim</span>
+      </button>
+    </div>
 
+    <!-- Navigation & Filter Toolbar -->
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel p-2 shadow-2xs text-xs">
+      <div class="flex items-center gap-1 bg-surface p-1 rounded-xl border border-line-strong overflow-x-auto scrollbar-none">
         <button
-          class="flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:border-accent hover:text-accent disabled:opacity-40"
-          :disabled="!store.unread"
-          @click="markAll"
+          type="button"
+          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition cursor-pointer shrink-0"
+          :class="!unreadOnly ? 'bg-ink text-on-ink shadow-xs' : 'text-muted hover:text-ink hover:bg-raised'"
+          @click="toggleFilter(false)"
         >
-          <IconRead /> Označi sve
+          <span>Sve obavijesti</span>
+        </button>
+        <button
+          type="button"
+          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition cursor-pointer shrink-0"
+          :class="unreadOnly ? 'bg-ink text-on-ink shadow-xs' : 'text-muted hover:text-ink hover:bg-raised'"
+          @click="toggleFilter(true)"
+        >
+          <span>Samo nepročitano</span>
+          <span v-if="store.unread" class="ml-1 rounded-full bg-accent px-1.5 py-0.2 text-[10px] font-bold text-on-accent">
+            {{ store.unread }}
+          </span>
         </button>
       </div>
-    </header>
+    </div>
 
     <SkeletonLoader v-if="store.loading" type="grid" :rows="6" />
 
-    <p v-else-if="!store.items.length" class="rounded border border-line bg-panel px-4 py-8 text-center text-sm text-faint">
-      {{ unreadOnly ? 'Nema nepročitanih stavki u inboxu.' : 'Inbox je prazan.' }}
-    </p>
+    <div v-else-if="!store.items.length" class="rounded-2xl border border-line bg-panel p-12 text-center shadow-2xs">
+      <IconNotifications class="mx-auto text-3xl text-dim mb-2" />
+      <p class="text-sm font-bold text-ink">Nema obavijesti</p>
+      <p class="text-xs text-muted mt-1 max-w-sm mx-auto">
+        {{ unreadOnly ? 'Nema nepročitanih stavki u inboxu.' : 'Inbox je trenutno prazan.' }}
+      </p>
+    </div>
 
     <ul v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       <li v-for="n in store.items" :key="n._id">
         <component
           :is="targetRoute(n) ? 'RouterLink' : 'div'"
           :to="targetRoute(n)"
-          class="group flex h-full flex-col rounded-lg border bg-panel p-3.5 transition-all"
+          class="group flex h-full flex-col rounded-2xl border bg-panel p-4 shadow-2xs transition-all hover:shadow-sm"
           :class="[
-            n.read ? 'border-line' : 'border-accent/40 bg-accent/[0.03]',
-            targetRoute(n) ? 'hover:border-accent hover:bg-raised/40 cursor-pointer' : ''
+            n.read ? 'border-line hover:border-line-strong' : 'border-accent/40 bg-accent/[0.02] ring-1 ring-accent/20',
+            targetRoute(n) ? 'cursor-pointer' : ''
           ]"
         >
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2.5">
             <span
-              class="flex size-7 shrink-0 items-center justify-center rounded"
+              class="flex size-8 shrink-0 items-center justify-center rounded-xl shadow-2xs"
               :class="TONE_CHIP[kind(n.type).tone]"
             >
               <component :is="kind(n.type).icon" class="text-base" />
             </span>
 
-            <span class="truncate text-sm font-medium text-ink">{{ kind(n.type).label }}</span>
+            <span class="truncate text-xs sm:text-sm font-bold text-ink">{{ kind(n.type).label }}</span>
 
             <span
               v-if="!n.read"
-              class="ml-auto size-2 shrink-0 rounded-full bg-accent"
+              class="ml-auto size-2.5 shrink-0 rounded-full bg-accent ring-2 ring-panel animate-pulse"
               aria-label="nepročitano"
             />
           </div>
 
-          <div v-if="n.user" class="mt-2.5 flex items-center gap-2 text-xs">
+          <div v-if="n.user" class="mt-3 flex items-center gap-2 text-xs">
             <div
               :style="avatarStyle(n.user.name || n.user.email)"
-              class="flex size-5 shrink-0 items-center justify-center rounded text-[10px] font-semibold"
+              class="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-2xs"
             >
               {{ initials(n.user.name || n.user.email) }}
             </div>
-            <span class="truncate font-medium text-ink">{{ n.user.name || n.user.email }}</span>
+            <span class="truncate font-semibold text-ink">{{ n.user.name || n.user.email }}</span>
           </div>
 
-          <div v-if="n.song" class="mt-1 text-xs">
-            <span class="font-medium text-ink">{{ n.song.title }}</span>
-            <span v-if="n.song.artist" class="text-muted"> · {{ n.song.artist.name || n.song.artist }}</span>
+          <div v-if="n.song" class="mt-1.5 text-xs">
+            <span class="font-bold text-ink">{{ n.song.title }}</span>
+            <span v-if="n.song.artist" class="text-muted font-medium"> · {{ n.song.artist.name || n.song.artist }}</span>
           </div>
 
-          <p v-if="n.body" class="mt-2 line-clamp-3 text-xs text-muted whitespace-pre-wrap">
+          <p v-if="n.body" class="mt-2 line-clamp-3 text-xs text-muted leading-relaxed whitespace-pre-wrap bg-surface/50 p-2 rounded-xl border border-line-soft font-mono">
             {{ n.body }}
           </p>
 
-          <footer class="mt-auto pt-3 text-[11px] text-faint flex items-center justify-between">
+          <footer class="mt-auto pt-3 text-[11px] text-faint flex items-center justify-between border-t border-line-soft mt-3 font-mono">
             <time :datetime="n.createdAt" :title="when(n.createdAt)">{{ ago(n.createdAt) }}</time>
-            <span v-if="targetRoute(n)" class="opacity-0 group-hover:opacity-100 text-accent transition-opacity">
-              Otvori →
+            <span v-if="targetRoute(n)" class="opacity-0 group-hover:opacity-100 text-accent font-bold font-sans transition-opacity">
+              Pregledaj →
             </span>
           </footer>
         </component>
       </li>
     </ul>
 
-    <nav v-if="store.meta && store.meta.pages > 1" class="mt-6 flex justify-center gap-2 text-sm">
+    <!-- Pagination Controls -->
+    <div v-if="store.meta && store.meta.pages > 1" class="mt-6 flex items-center justify-center gap-2">
       <button
-        v-for="p in store.meta.pages" :key="p"
-        class="size-8 rounded border text-xs"
-        :class="page === p ? 'border-accent bg-accent text-on-accent' : 'border-line-strong bg-panel hover:border-accent'"
-        @click="page = p; load()"
-      >{{ p }}</button>
-    </nav>
+        type="button"
+        class="flex size-8 items-center justify-center rounded-xl border border-line bg-panel text-muted hover:border-line-strong hover:text-ink transition disabled:opacity-40 cursor-pointer"
+        :disabled="page <= 1"
+        @click="page--; load()"
+      >
+        <IconPrev class="text-sm" />
+      </button>
+
+      <span class="font-mono text-xs text-faint px-2">
+        Stranica {{ page }} od {{ store.meta.pages }}
+      </span>
+
+      <button
+        type="button"
+        class="flex size-8 items-center justify-center rounded-xl border border-line bg-panel text-muted hover:border-line-strong hover:text-ink transition disabled:opacity-40 cursor-pointer"
+        :disabled="page >= store.meta.pages"
+        @click="page++; load()"
+      >
+        <IconNext class="text-sm" />
+      </button>
+    </div>
   </section>
 </template>

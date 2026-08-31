@@ -30,9 +30,18 @@ const PALETTE = [
  */
 export function initials(name) {
   if (!name) return '?';
-  const words = String(name).trim().split(/\s+/).filter(Boolean);
+  const clean = String(name).replace(/^[(\["'„«\s]+/, '').trim();
+  const words = clean.split(/\s+/).filter(Boolean);
   if (!words.length) return '?';
-  return words.slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  const firstLetters = words
+    .slice(0, 2)
+    .map((w) => {
+      const pure = w.replace(/^[^a-zA-Z0-9čćđšžČĆĐŠŽ]+/, '');
+      return (pure && pure[0]) || w[0] || '';
+    })
+    .filter(Boolean)
+    .join('');
+  return (firstLetters || clean.slice(0, 2) || '?').toUpperCase();
 }
 
 /**
@@ -48,23 +57,26 @@ export function avatarColor(name) {
   return PALETTE[hash % PALETTE.length];
 }
 
-/** Inline style for the fallback circle: tinted ground, solid letters. */
+/** Inline style for the fallback circle: rich gradient ground, crisp white letters. */
 export function avatarStyle(name) {
   const color = avatarColor(name);
-  return { backgroundColor: `color-mix(in srgb, ${color} 16%, white)`, color };
+  return {
+    background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 75%, black))`,
+    color: '#ffffff'
+  };
 }
 
-/** Consistent badge style for user roles: superadmin (glowing yellow), admin (orange glow), moderator/worker (grey). */
+/** Consistent badge style for user roles: superadmin (warn), admin (accent), moderator/worker (muted). */
 export function roleBadgeClass(role) {
   switch (role) {
     case 'superadmin':
-      return 'border border-amber-400/60 bg-amber-400/20 text-amber-500 dark:text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.5)]';
+      return 'border border-warn/40 bg-warn-soft text-warn font-mono';
     case 'admin':
-      return 'border border-orange-500/60 bg-orange-500/20 text-orange-500 dark:text-orange-300 shadow-[0_0_10px_rgba(249,115,22,0.45)]';
+      return 'border border-accent/40 bg-accent-soft text-accent font-mono';
     case 'moderator':
     case 'worker':
     default:
-      return 'border border-line bg-raised text-muted';
+      return 'border border-line bg-raised text-muted font-mono';
   }
 }
 

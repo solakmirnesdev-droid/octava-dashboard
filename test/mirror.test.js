@@ -27,7 +27,10 @@ const here = dirname(fileURLToPath(import.meta.url));
  */
 const MIRRORED = [
   ['chordpro.js', 'chordpro.js'],
-  ['fingerprint.js', 'fingerprint.js']
+  ['fingerprint.js', 'fingerprint.js'],
+  ['chordShapes.js', 'chordShapes.js'],
+  ['chordEngine.js', 'chordEngine.js'],
+  ['chordAudio.js', 'chordAudio.js']
 ];
 
 /*

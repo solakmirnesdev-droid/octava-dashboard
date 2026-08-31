@@ -1,7 +1,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseLine, columnToSource, insertChord, replaceChord, removeChord
+  parseLine, columnToSource, insertChord, replaceChord, removeChord,
+  buildLineWithChords, updatePlainText
 } from '../src/utils/chordline.js';
 
 describe('razdvajanje linije', () => {
@@ -67,5 +68,26 @@ describe('izmjene', () => {
     const source = 'jedan dva tri';
     const withChord = insertChord(source, 6, 'Am');
     assert.equal(removeChord(withChord, 0), source);
+  });
+
+  test('umetanje akorda iza kraja teksta dodaje razmake i ne preklapa', () => {
+    const source = '[Cm]tekst';
+    const withTrailing = insertChord(source, 15, 'A#');
+    assert.equal(withTrailing, '[Cm]tekst          [A#]');
+    const parsed = parseLine(withTrailing);
+    assert.equal(parsed.plain, 'tekst          ');
+    assert.deepEqual(parsed.chords.map((c) => [c.chord, c.column]), [['Cm', 0], ['A#', 15]]);
+  });
+
+  test('izmjena teksta stiha cuva raspored akorda', () => {
+    const source = '[Am]Znam da [G]ipak';
+    const updated = updatePlainText(source, 'Znam da sada mislis');
+    assert.equal(updated, '[Am]Znam da [G]sada mislis');
+  });
+
+  test('brisanje dijela teksta i rekonstrukcija', () => {
+    const chords = [{ chord: 'Am', column: 0 }, { chord: 'G', column: 6 }];
+    const out = buildLineWithChords('kratko', chords);
+    assert.equal(out, '[Am]kratko[G]');
   });
 });

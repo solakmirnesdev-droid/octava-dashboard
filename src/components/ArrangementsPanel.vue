@@ -125,20 +125,20 @@ const labelOf = (v) => DIFFICULTIES.find((d) => d.value === v)?.label || v;
 
 <template>
   <section class="mb-4">
-    <div class="mb-1.5 flex items-center justify-between">
+    <div class="mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
       <div class="flex items-center gap-2">
-        <h2 class="text-xs font-semibold uppercase tracking-wider text-muted">Verzije ({{ arrangements.length }})</h2>
+        <h2 class="text-xs font-bold uppercase tracking-wider text-ink">Verzije ({{ arrangements.length }})</h2>
         <span class="text-[11px] text-faint">
           Obrazac iznad uređuje glavnu verziju.
-          <span v-if="atLimit">Dosegnut limit (6).</span>
+          <span v-if="atLimit" class="text-warn">Dosegnut limit (6).</span>
         </span>
       </div>
       <button
-        class="rounded border border-line-strong px-2.5 py-1 text-xs hover:border-accent disabled:opacity-50"
+        class="self-start sm:self-auto rounded-lg border border-line-strong px-2.5 py-1 text-xs font-semibold text-muted hover:border-accent hover:text-accent disabled:opacity-50 transition cursor-pointer"
         :disabled="adding || atLimit || busy"
         @click="startAdding"
       >
-        <span class="flex items-center gap-1"><IconAdd /> Dodaj verziju</span>
+        <span class="flex items-center gap-1"><IconAdd class="text-sm" /> Dodaj verziju</span>
       </button>
     </div>
 

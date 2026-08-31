@@ -14,10 +14,12 @@ import IconMusic from '~icons/material-symbols/music-note-rounded';
 import IconSearch from '~icons/material-symbols/search-rounded';
 import IconCheckDouble from '~icons/material-symbols/done-all-rounded';
 import IconCheck from '~icons/material-symbols/check-rounded';
+import IconPrev from '~icons/material-symbols/chevron-left-rounded';
 
 const {
   connected, authFailed, peers, messages, activeId, loading, me,
-  connect, loadPeers, openThread, send, isOnline
+  connect, loadPeers, openThread, send, isOnline,
+  loadOlder, hasOlder, loadingOlder
 } = useChat();
 
 const toasts = useToasts();
@@ -51,7 +53,39 @@ async function toBottom() {
   if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight;
 }
 
-watch(messages, toBottom, { deep: true });
+/**
+ * AI-TRAP: the watcher below jumps to the newest message on ANY change to the
+ * list, and prepending older ones is a change. Without this flag, asking for
+ * older messages loaded them and then threw the reader straight back to the
+ * bottom — the feature would appear to do nothing at all.
+ */
+const holdingPosition = ref(false);
+
+watch(messages, () => {
+  if (holdingPosition.value) return;
+  toBottom();
+}, { deep: true });
+
+/**
+ * Older messages, with the reader left looking at the same line.
+ *
+ * Prepending pushes the content down by exactly the height of what arrived, so
+ * the distance from the BOTTOM is what stays constant, not scrollTop. Measuring
+ * before and restoring after is the whole trick.
+ */
+async function older() {
+  const box = scroller.value;
+  const before = box ? box.scrollHeight - box.scrollTop : 0;
+
+  holdingPosition.value = true;
+  try {
+    await loadOlder();
+    await nextTick();
+    if (box) box.scrollTop = box.scrollHeight - before;
+  } finally {
+    holdingPosition.value = false;
+  }
+}
 
 async function pick(peer) {
   await openThread(peer._id);
@@ -165,13 +199,13 @@ onBeforeUnmount(() => {});
           class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
           :class="authFailed
             ? 'bg-danger-soft text-danger'
-            : connected ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'"
+            : connected ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'"
         >
           <span
             class="size-2 rounded-full"
             :class="authFailed
               ? 'bg-danger'
-              : connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'"
+              : connected ? 'bg-ok animate-pulse' : 'bg-warn'"
           />
           {{ authFailed
             ? 'Sesija je istekla — prijavi se ponovo'
@@ -184,7 +218,10 @@ onBeforeUnmount(() => {});
     <div class="grid gap-4 lg:grid-cols-12">
 
       <!-- Left Sidebar: Colleagues list -->
-      <aside class="flex flex-col rounded-xl border border-line bg-panel shadow-sm lg:col-span-4 h-[36rem] overflow-hidden">
+      <aside
+        class="flex flex-col rounded-2xl border border-line bg-panel shadow-sm lg:col-span-4 h-[calc(100vh-14rem)] lg:h-[36rem] overflow-hidden"
+        :class="{ 'hidden lg:flex': active }"
+      >
         <!-- Search Colleagues -->
         <div class="p-3 border-b border-line-soft">
           <div class="relative">
@@ -193,7 +230,7 @@ onBeforeUnmount(() => {});
               v-model="searchPeer"
               type="text"
               placeholder="Pretraži kolege…"
-              class="w-full rounded-lg border border-line-strong bg-surface py-1.5 pl-8 pr-3 text-xs outline-none focus:border-accent"
+              class="w-full rounded-xl border border-line-strong bg-surface py-1.5 pl-8 pr-3 text-xs outline-none focus:border-accent"
             />
           </div>
         </div>
@@ -203,7 +240,7 @@ onBeforeUnmount(() => {});
           <li v-for="peer in filteredPeers" :key="peer._id">
             <button
               type="button"
-              class="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-raised/60"
+              class="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-raised/60 cursor-pointer active:bg-raised"
               :class="peer._id === activeId ? 'bg-accent-soft/70 border-l-3 border-accent' : ''"
               @click="pick(peer)"
             >
@@ -217,7 +254,7 @@ onBeforeUnmount(() => {});
                 </div>
                 <span
                   class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-panel"
-                  :class="isOnline(peer._id) ? 'bg-emerald-500' : 'bg-line-strong'"
+                  :class="isOnline(peer._id) ? 'bg-ok' : 'bg-line-strong'"
                   :title="isOnline(peer._id) ? 'Na vezi' : 'Nije na vezi'"
                 />
               </div>
@@ -250,7 +287,7 @@ onBeforeUnmount(() => {});
                   </span>
                   <span
                     class="size-1.5 rounded-full shrink-0 ml-1"
-                    :class="isOnline(peer._id) ? 'bg-emerald-500' : 'bg-transparent'"
+                    :class="isOnline(peer._id) ? 'bg-ok' : 'bg-transparent'"
                   />
                 </div>
               </div>
@@ -264,11 +301,23 @@ onBeforeUnmount(() => {});
       </aside>
 
       <!-- Right Column: Conversation Box -->
-      <section class="flex flex-col rounded-xl border border-line bg-panel shadow-sm lg:col-span-8 h-[36rem] overflow-hidden">
+      <section
+        class="flex flex-col rounded-2xl border border-line bg-panel shadow-sm lg:col-span-8 h-[calc(100vh-14rem)] lg:h-[36rem] overflow-hidden"
+        :class="{ 'hidden lg:flex': !active }"
+      >
         <template v-if="active">
           <!-- Active Conversation Header -->
           <header class="flex items-center justify-between border-b border-line-soft bg-raised/30 px-4 py-3">
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                class="lg:hidden -ml-1 flex size-8 items-center justify-center rounded-lg text-muted hover:bg-raised hover:text-ink transition cursor-pointer active:scale-95"
+                title="Nazad na listu kolega"
+                @click="activeId = null"
+              >
+                <IconPrev class="text-xl" />
+              </button>
+
               <div class="relative shrink-0">
                 <div
                   class="flex size-9 items-center justify-center rounded-full text-xs font-bold text-white shadow-xs"
@@ -278,7 +327,7 @@ onBeforeUnmount(() => {});
                 </div>
                 <span
                   class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-panel"
-                  :class="isOnline(active._id) ? 'bg-emerald-500' : 'bg-line-strong'"
+                  :class="isOnline(active._id) ? 'bg-ok' : 'bg-line-strong'"
                 />
               </div>
 
@@ -294,7 +343,7 @@ onBeforeUnmount(() => {});
                   </span>
                 </div>
                 <div class="flex items-center gap-1.5 mt-1">
-                  <span class="text-[11px]" :class="isOnline(active._id) ? 'text-emerald-500 font-medium' : 'text-muted'">
+                  <span class="text-[11px]" :class="isOnline(active._id) ? 'text-ok font-medium' : 'text-muted'">
                     {{ isOnline(active._id) ? 'na vezi' : 'nije na vezi' }}
                   </span>
                 </div>
@@ -304,6 +353,17 @@ onBeforeUnmount(() => {});
 
           <!-- Messages Stream -->
           <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4 bg-surface/50">
+            <!-- Only when there is genuinely more behind: a button that loads
+                 nothing is worse than no button. -->
+            <div v-if="hasOlder && !loading" class="flex justify-center pb-2">
+              <button
+                type="button"
+                class="rounded-full border border-line-strong px-3 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-40"
+                :disabled="loadingOlder"
+                @click="older"
+              >{{ loadingOlder ? 'Učitavam…' : 'Starije poruke' }}</button>
+            </div>
+
             <div v-if="loading" class="flex items-center justify-center py-12 text-xs text-muted">
               <div class="size-4 animate-spin rounded-full border-2 border-accent border-t-transparent mr-2" />
               Učitavam poruke…
@@ -343,7 +403,7 @@ onBeforeUnmount(() => {});
                 >
                   <span>{{ day(m.createdAt) }} {{ time(m.createdAt) }}</span>
                   <template v-if="m.from === me">
-                    <IconCheckDouble v-if="m.readAt" class="text-xs text-emerald-300" title="Pročitano" />
+                    <IconCheckDouble v-if="m.readAt" class="text-xs text-ok" title="Pročitano" />
                     <IconCheck v-else class="text-xs opacity-75" title="Poslano" />
                   </template>
                 </div>
