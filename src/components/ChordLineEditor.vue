@@ -42,6 +42,24 @@ const allSongChords = computed(() => {
   return [...seen];
 });
 
+/** List of song sections with their line index for quick jump navigation */
+const songSections = computed(() => {
+  const res = [];
+  parsed.value.forEach((line, idx) => {
+    if (line.section) {
+      res.push({ label: line.section, index: idx });
+    }
+  });
+  return res;
+});
+
+function scrollToSection(index) {
+  const el = document.querySelector(`[data-section-index="${index}"]`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 /**
  * Monospace column-to-pixel measurement.
  */
@@ -64,8 +82,12 @@ function handleDocumentPointerDown(e) {
 }
 
 function handleGlobalKeydown(e) {
-  if (e.key === 'Escape' && editing.value) {
-    editing.value = null;
+  if (e.key === 'Escape') {
+    if (editing.value) {
+      editing.value = null;
+    } else if (activeStampChord.value) {
+      activeStampChord.value = null;
+    }
   }
 }
 
@@ -234,7 +256,7 @@ const quickPaletteChords = computed(() => {
   for (const c of COMMON_CHORDS) {
     if (!list.includes(c)) list.push(c);
   }
-  return list.slice(0, 14);
+  return list.slice(0, 16);
 });
 
 async function openAt(lineIndex, event) {
@@ -316,9 +338,9 @@ function getChordChipStyle(lineIndex, ci, c, allChords) {
   // Anti-collision staggering: ensure no two chord chips overlap horizontally
   if (ci > 0 && allChords) {
     const prevChord = allChords[ci - 1];
-    const prevLeft = prevChord._renderLeft ?? (prevChord.column * charWidth.value);
-    const minChipWidth = Math.max(charWidth.value * 2, (String(prevChord.chord || '').length * charWidth.value * 1.2) + (fontSize.value * 0.6));
-    const gap = Math.max(2, fontSize.value * 0.15);
+    const prevLeft = prevChord._renderLeft !== undefined ? prevChord._renderLeft : (prevChord.column * charWidth.value);
+    const minChipWidth = Math.max(28, (String(prevChord.chord || '').length * charWidth.value * 1.1) + 8);
+    const gap = 4;
     if (renderLeft < prevLeft + minChipWidth + gap) {
       renderLeft = prevLeft + minChipWidth + gap;
     }
@@ -334,7 +356,7 @@ function getChordChipStyle(lineIndex, ci, c, allChords) {
 
 <template>
   <div
-    class="relative font-mono leading-relaxed select-text text-ink font-medium tracking-normal"
+    class="relative font-mono select-text text-ink font-medium tracking-normal"
     :style="{ fontSize: fontSize + 'px' }"
   >
     <!-- Off-screen sample used only to measure one character's width. -->
@@ -342,25 +364,25 @@ function getChordChipStyle(lineIndex, ci, c, allChords) {
           class="pointer-events-none absolute -top-96 left-0 whitespace-pre opacity-0 font-mono"
           :style="{ fontSize: fontSize + 'px' }">{{ RULER_SAMPLE }}</span>
 
-    <!-- Sticky Quick Chord Bank & Active Stamp Placer Bar -->
+    <!-- Sticky Quick Chord Bank, Active Stamp Placer Bar & Section Navigator -->
     <div
       data-chord-bank
-      class="sticky top-0 z-30 -mt-1 mb-4 rounded-2xl border border-line-strong bg-panel/95 backdrop-blur-md p-3 shadow-sm"
+      class="sticky top-0 z-30 mb-3 rounded-xl border border-line-strong/80 bg-panel/95 backdrop-blur-md p-2 shadow-xs"
     >
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-          <span class="text-[10px] font-sans font-bold uppercase tracking-wider text-muted mr-0.5 shrink-0">
+      <div class="flex flex-wrap items-center justify-between gap-1.5">
+        <div class="flex flex-wrap items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none flex-1">
+          <span class="text-[10px] font-sans font-bold uppercase tracking-wider text-muted mr-0.5 shrink-0 select-none">
             {{ activeStampChord ? '🎯 Štambilj:' : 'Akordi:' }}
           </span>
           <button
             v-for="c in quickPaletteChords"
             :key="c"
             type="button"
-            class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-mono font-black transition shadow-2xs cursor-pointer active:scale-95"
+            class="shrink-0 rounded-lg px-2 py-0.5 text-xs font-mono font-black transition shadow-2xs cursor-pointer active:scale-95"
             :class="activeStampChord === c
-              ? 'bg-accent text-on-accent ring-2 ring-accent ring-offset-1 font-black scale-105'
-              : 'bg-raised text-accent border border-line hover:border-accent hover:bg-accent-soft'"
-            :title="activeStampChord === c ? 'Klikni da deaktiviraš' : 'Klikni da aktiviraš brzi unos dodirom'"
+              ? 'bg-accent text-on-accent ring-2 ring-accent ring-offset-1 font-black scale-105 shadow-md'
+              : 'bg-surface text-accent border border-line-soft hover:border-accent hover:bg-accent-soft'"
+            :title="activeStampChord === c ? 'Klikni da deaktiviraš' : 'Klikni da aktiviraš brzi unos dodirom na stih'"
             @click="selectStampChord(c)"
           >
             {{ c }}
@@ -368,250 +390,311 @@ function getChordChipStyle(lineIndex, ci, c, allChords) {
         </div>
 
         <div v-if="activeStampChord" class="flex items-center gap-1.5 shrink-0">
-          <span class="text-[11px] font-sans text-accent font-bold animate-pulse">Dodirni stih za unos</span>
+          <span class="text-[11px] font-sans text-accent font-bold animate-pulse hidden sm:inline">Klikni na stih</span>
           <button
             type="button"
-            class="rounded-lg border border-line-strong bg-panel px-2.5 py-1 text-[11px] font-sans font-semibold text-muted hover:text-ink cursor-pointer shadow-2xs"
+            class="rounded-lg border border-accent bg-accent-soft px-2 py-0.5 text-[10px] font-sans font-bold text-accent hover:bg-accent hover:text-on-accent cursor-pointer shadow-2xs transition"
             @click="activeStampChord = null"
           >
-            Isključi
+            Isključi (Esc)
           </button>
         </div>
+      </div>
+
+      <!-- Quick Section Jump Navigator -->
+      <div
+        v-if="songSections.length > 1"
+        class="flex items-center gap-1 overflow-x-auto pt-1 mt-1 border-t border-line-soft/80 scrollbar-none"
+      >
+        <span class="text-[9px] font-sans font-bold uppercase tracking-wider text-faint shrink-0 select-none">Skoči na:</span>
+        <button
+          v-for="s in songSections"
+          :key="s.index"
+          type="button"
+          class="shrink-0 rounded-md border border-line-soft bg-surface/80 px-1.5 py-0.2 text-[10px] font-sans font-bold text-muted hover:border-accent hover:text-accent hover:bg-accent-soft transition cursor-pointer"
+          @click="scrollToSection(s.index)"
+        >
+          {{ s.label }}
+        </button>
       </div>
     </div>
 
-    <template v-for="(line, i) in parsed" :key="i">
-      <!-- Section header (e.g. [Refren], [Strofa 1], [Uvod]) -->
-      <div v-if="line.section" class="mt-[1.5em] mb-[0.6em] flex items-center gap-[0.5em]">
-        <div class="inline-flex items-center gap-[0.3em] rounded-[0.4em] bg-accent-soft px-[0.6em] py-[0.2em] border border-accent/25 shadow-2xs">
-          <input
-            :value="line.section"
-            type="text"
-            spellcheck="false"
-            :data-line-input="i"
-            class="font-sans text-[0.85em] font-black tracking-wider uppercase text-accent bg-transparent outline-none w-auto max-w-[16rem] transition-colors"
-            placeholder="OZNAKA SEKCIJE..."
-            @input="onSectionInput(i, $event.target.value)"
-            @keydown="onLyricKeydown(i, $event)"
-          />
-        </div>
-        <div class="h-px flex-1 bg-line-soft" />
-      </div>
-
-      <!-- Blank line / Stanza break -->
-      <div v-else-if="!line.raw.trim()" class="relative my-[0.6em] flex items-center gap-[0.4em]">
-        <input
-          type="text"
-          spellcheck="false"
-          :data-line-input="i"
-          placeholder="␣ prazan red (razmak između strofa)"
-          class="w-full h-[1.4em] bg-transparent px-[0.2em] text-ink font-mono text-[1em] outline-none border-b border-dashed border-line-soft/40 hover:border-accent/40 focus:border-accent rounded transition-colors placeholder:text-faint/30 placeholder:font-sans placeholder:text-[0.75em]"
-          @input="onPlainInput(i, $event.target.value)"
-          @keydown="onLyricKeydown(i, $event)"
-        />
-      </div>
-
-      <!-- Instrumental run (Solo / Chords without lyrics) -->
-      <div v-else-if="line.instrumental" class="my-[0.5em] flex flex-wrap items-center gap-[0.4em] rounded-[0.5em] bg-surface/70 border border-line-soft px-[0.5em] py-[0.3em] shadow-2xs">
-        <span class="text-[0.75em] font-sans font-bold uppercase tracking-wider text-faint px-[0.2em]">Solo:</span>
+    <!-- Song Lines Container -->
+    <div class="space-y-0.5">
+      <template v-for="(line, i) in parsed" :key="i">
+        <!-- Section header (e.g. [Refren], [Strofa 1], [Uvod]) -->
         <div
-          v-for="(c, ci) in line.chords" :key="ci"
-          data-chip
-          class="relative inline-flex items-center"
+          v-if="line.section"
+          :data-section-index="i"
+          class="scroll-mt-20 mt-[1.1em] mb-[0.3em] flex items-center gap-[0.4em] group/sec"
         >
+          <div class="inline-flex items-center gap-[0.3em] rounded-[0.4em] bg-accent-soft px-[0.5em] py-[0.15em] border border-accent/30 shadow-2xs">
+            <input
+              :value="line.section"
+              type="text"
+              spellcheck="false"
+              :data-line-input="i"
+              class="font-sans text-[0.8em] font-black tracking-wider uppercase text-accent bg-transparent outline-none w-auto max-w-[16rem] transition-colors"
+              placeholder="OZNAKA SEKCIJE..."
+              @input="onSectionInput(i, $event.target.value)"
+              @keydown="onLyricKeydown(i, $event)"
+            />
+          </div>
+          <div class="h-px flex-1 bg-line" />
           <button
             type="button"
-            class="rounded-[0.35em] px-[0.4em] py-[0.1em] text-[1.2em] font-black font-mono text-accent bg-panel border border-accent/30 shadow-2xs hover:bg-accent hover:text-on-accent transition-all cursor-grab active:cursor-grabbing leading-none"
-            @click="openChip(i, ci, c.chord, c.column)"
+            class="opacity-0 group-hover/sec:opacity-70 hover:!opacity-100 p-1 text-faint hover:text-danger rounded transition cursor-pointer text-xs"
+            title="Ukloni sekciju"
+            @click="deleteLine(i)"
           >
-            {{ c.chord }}
+            <IconDelete class="text-xs" />
           </button>
         </div>
 
-        <button
-          type="button"
-          class="rounded-[0.35em] border border-dashed border-line-strong px-[0.4em] py-[0.1em] text-[0.8em] text-muted hover:border-accent hover:text-accent transition ml-auto font-sans font-semibold cursor-pointer shadow-2xs leading-none"
-          title="Dodaj akord u solo"
-          @click="openAt(i, $event)"
-        >
-          + Akord
-        </button>
-      </div>
-
-      <!-- Regular lyric line with distinct chord track & precision alignment -->
-      <div v-else class="group/line relative mb-[0.6em]">
-        <!-- Chord Lane: Distinct sliding rail track positioned right above the text -->
-        <div
-          data-chord-lane
-          class="relative min-h-[1.75em] h-[1.75em] flex items-center cursor-text transition-all rounded-[0.4em] select-none bg-surface/70 border border-line-strong hover:border-accent/60 hover:bg-surface px-[0.2em] shadow-2xs before:pointer-events-none before:absolute before:inset-x-[0.3em] before:top-1/2 before:h-px before:bg-line-strong/40"
-          title="Klikni ili prevuci akord po traci"
-          @click="openAt(i, $event)"
-        >
-          <!-- Drag target vertical laser hairline reaching down through the lyrics -->
-          <div
-            v-if="draggingChord?.lineIndex === i"
-            class="pointer-events-none absolute top-0 -bottom-[1.2em] w-0.5 bg-accent shadow-[0_0_8px_var(--color-accent)] z-30"
-            :style="{ left: (draggingChord.currentColumn * charWidth) + 'px' }"
-          />
-
-          <!-- Placed Chord Chips with Anti-Collision Staggering -->
-          <div
-            v-for="(c, ci) in line.chords" :key="ci"
-            data-chip
-            class="absolute top-1/2 -translate-y-1/2"
-            :style="getChordChipStyle(i, ci, c, line.chords)"
-          >
-            <!-- Precision letter preview tooltip while dragging -->
-            <div
-              v-if="draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci"
-              class="pointer-events-none absolute -top-[1.6em] left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-ink px-[0.4em] py-[0.1em] text-[0.75em] font-mono font-bold text-on-ink shadow-md z-40 border border-line flex items-center gap-[0.2em]"
-            >
-              <span>{{ draggingChord.chord }}</span>
-              <span class="text-accent">→</span>
-              <span class="underline">{{ (line.plain[draggingChord.currentColumn] === ' ' ? '␣ (razmak)' : line.plain[draggingChord.currentColumn]) || 'kraj' }}</span>
-              <span class="text-[0.75em] text-faint">({{ draggingChord.currentColumn }})</span>
-            </div>
-
-            <button
-              type="button"
-              class="group/btn relative inline-flex items-center gap-[0.15em] rounded-[0.35em] px-[0.35em] py-[0.1em] text-[1.2em] font-black font-mono leading-none tracking-tight transition-all select-none shadow-xs"
-              :class="[
-                draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci
-                  ? 'bg-accent text-on-accent ring-2 ring-accent shadow-xl scale-105 cursor-grabbing'
-                  : 'bg-panel text-accent border border-accent/40 hover:bg-accent hover:text-on-accent hover:border-accent cursor-grab active:cursor-grabbing'
-              ]"
-              @pointerdown="startChordDrag(i, ci, c.chord, c.column, $event)"
-            >
-              <!-- Grip handle dots icon -->
-              <span class="text-[0.65em] opacity-40 group-hover/btn:opacity-90 transition-opacity select-none -ml-[0.1em]">⋮</span>
-              <span>{{ c.chord }}</span>
-
-              <!-- Precision alignment pointer arrow pointing down to exact syllable -->
-              <span
-                class="pointer-events-none absolute -bottom-[0.35em] left-1/2 -translate-x-1/2 size-0 border-x-[0.2em] border-x-transparent border-t-[0.35em]"
-                :class="draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci ? 'border-t-accent' : 'border-t-accent/60 group-hover/btn:border-t-accent'"
-              />
-            </button>
-          </div>
-        </div>
-
-        <!-- Editable Lyric Text Line -->
-        <div class="relative flex items-center mt-[0.15em]">
+        <!-- Blank line / Stanza break -->
+        <div v-else-if="!line.raw.trim()" class="relative my-[0.45em] flex items-center gap-[0.3em] group/blank">
           <input
-            :value="line.plain"
             type="text"
             spellcheck="false"
             :data-line-input="i"
-            placeholder="Unesite stih..."
-            class="w-full bg-transparent px-[0.2em] py-[0.1em] text-ink font-semibold font-mono text-[1em] leading-normal outline-none border-b border-transparent focus:border-accent focus:bg-surface/50 hover:border-line-soft rounded transition-all placeholder:text-faint/40 placeholder:font-sans placeholder:text-[0.75em]"
+            placeholder="␣ razmak između strofa"
+            class="w-full h-[1.2em] bg-transparent px-[0.2em] text-ink font-mono text-[0.95em] outline-none border-b border-dashed border-line-soft/40 hover:border-accent/40 focus:border-accent rounded transition-colors placeholder:text-faint/30 placeholder:font-sans placeholder:text-[0.75em]"
             @input="onPlainInput(i, $event.target.value)"
             @keydown="onLyricKeydown(i, $event)"
           />
+          <button
+            type="button"
+            class="opacity-0 group-hover/blank:opacity-60 hover:!opacity-100 p-1 text-faint hover:text-danger rounded transition cursor-pointer text-xs shrink-0"
+            title="Obriši prazan red"
+            @click="deleteLine(i)"
+          >
+            <IconDelete class="text-xs" />
+          </button>
         </div>
 
-        <!-- Modern Floating Chord Popover -->
-        <div
-          v-if="editing?.lineIndex === i"
-          data-chord-popover
-          class="absolute z-50 -top-12 select-none"
-          :style="{ left: Math.max(0, (editing.column * charWidth) - 8) + 'px' }"
-          @click.stop
-          @pointerdown.stop
-          @mousedown.stop
-        >
-          <!-- Floating Capsule Card -->
-          <div class="relative flex flex-col gap-1.5 rounded-xl border border-line-strong bg-panel/95 backdrop-blur-xl p-1.5 shadow-2xl ring-1 ring-black/20">
-            <!-- Top Input Row -->
-            <div class="flex items-center gap-1.5">
-              <input
-                ref="input"
-                v-model="editing.value"
-                class="w-20 rounded-lg bg-surface px-2 py-0.5 text-xs font-black font-mono text-accent uppercase tracking-wider outline-none border border-line focus:border-accent focus:ring-1 focus:ring-accent transition shadow-2xs placeholder:text-faint/40 placeholder:normal-case"
-                placeholder="npr. Am"
-                @keydown.enter.prevent="commit"
-                @keydown.esc.prevent="editing = null"
-              />
+        <!-- Instrumental run (Solo / Chords without lyrics) -->
+        <div v-else-if="line.instrumental" class="my-[0.35em] flex flex-wrap items-center gap-[0.35em] rounded-[0.4em] bg-surface/70 border border-line-soft px-[0.4em] py-[0.2em] shadow-2xs group/inst">
+          <span class="text-[0.75em] font-sans font-bold uppercase tracking-wider text-faint px-[0.2em] select-none">Solo:</span>
+          <div
+            v-for="(c, ci) in line.chords" :key="ci"
+            data-chip
+            class="relative inline-flex items-center"
+          >
+            <button
+              type="button"
+              class="rounded-[0.35em] px-[0.35em] py-[0.1em] text-[1.15em] font-black font-mono text-accent bg-panel border border-accent/30 shadow-2xs hover:bg-accent hover:text-on-accent transition-all cursor-grab active:cursor-grabbing leading-none"
+              @click="openChip(i, ci, c.chord, c.column)"
+            >
+              {{ c.chord }}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            class="rounded-[0.35em] border border-dashed border-line-strong px-[0.35em] py-[0.1em] text-[0.75em] text-muted hover:border-accent hover:text-accent transition ml-auto font-sans font-semibold cursor-pointer shadow-2xs leading-none"
+            title="Dodaj akord u solo"
+            @click="openAt(i, $event)"
+          >
+            + Akord
+          </button>
+
+          <button
+            type="button"
+            class="opacity-0 group-hover/inst:opacity-70 hover:!opacity-100 p-1 text-faint hover:text-danger rounded transition cursor-pointer text-xs shrink-0"
+            title="Obriši solo liniju"
+            @click="deleteLine(i)"
+          >
+            <IconDelete class="text-xs" />
+          </button>
+        </div>
+
+        <!-- Regular lyric line with sleek chord track & syllable precision -->
+        <div v-else class="group/line relative mb-[0.2em] hover:bg-raised/20 rounded-[0.4em] px-1 transition-colors">
+          <!-- Sleek Chord Lane -->
+          <div
+            data-chord-lane
+            class="group/lane relative min-h-[1.5em] h-[1.5em] flex items-center cursor-text transition-all rounded-[0.35em] select-none px-[0.2em] border border-transparent hover:border-line-strong/50 hover:bg-raised/40"
+            :class="[
+              activeStampChord ? 'bg-accent-soft/20 border-dashed !border-accent/40 cursor-crosshair' : '',
+              line.chords.length ? 'before:pointer-events-none before:absolute before:inset-x-[0.3em] before:top-1/2 before:h-px before:bg-line-soft/60' : 'hover:before:pointer-events-none hover:before:absolute hover:before:inset-x-[0.3em] hover:before:top-1/2 hover:before:h-px hover:before:bg-accent/25'
+            ]"
+            :title="activeStampChord ? `Klikni da postaviš akord [${activeStampChord}]` : 'Klikni ili prevuci akord po traci'"
+            @click="openAt(i, $event)"
+          >
+            <!-- Drag target vertical laser hairline reaching down through the lyrics -->
+            <div
+              v-if="draggingChord?.lineIndex === i"
+              class="pointer-events-none absolute top-0 -bottom-[1.2em] w-0.5 bg-accent shadow-[0_0_8px_var(--color-accent)] z-30"
+              :style="{ left: (draggingChord.currentColumn * charWidth) + 'px' }"
+            />
+
+            <!-- Placed Chord Chips with Anti-Collision Staggering -->
+            <div
+              v-for="(c, ci) in line.chords" :key="ci"
+              data-chip
+              class="absolute top-1/2 -translate-y-1/2"
+              :style="getChordChipStyle(i, ci, c, line.chords)"
+            >
+              <!-- Precision letter preview tooltip while dragging -->
+              <div
+                v-if="draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci"
+                class="pointer-events-none absolute -top-[1.6em] left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-ink px-[0.4em] py-[0.1em] text-[0.75em] font-mono font-bold text-on-ink shadow-md z-40 border border-line flex items-center gap-[0.2em]"
+              >
+                <span>{{ draggingChord.chord }}</span>
+                <span class="text-accent">→</span>
+                <span class="underline">{{ (line.plain[draggingChord.currentColumn] === ' ' ? '␣ (razmak)' : line.plain[draggingChord.currentColumn]) || 'kraj' }}</span>
+                <span class="text-[0.75em] text-faint">({{ draggingChord.currentColumn }})</span>
+              </div>
 
               <button
                 type="button"
-                class="flex size-6.5 items-center justify-center rounded-lg bg-accent text-on-accent hover:brightness-110 active:scale-95 transition shadow-xs cursor-pointer font-bold shrink-0"
-                title="Sačuvaj akord (Enter)"
-                aria-label="Sačuvaj akord"
-                @mousedown.prevent="commit"
+                class="group/btn relative inline-flex items-center gap-[0.15em] rounded-[0.35em] px-[0.35em] py-[0.1em] text-[1.15em] font-black font-mono leading-none tracking-tight transition-all select-none shadow-2xs"
+                :class="[
+                  draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci
+                    ? 'bg-accent text-on-accent ring-2 ring-accent shadow-xl scale-105 cursor-grabbing'
+                    : 'bg-panel text-accent border border-accent/40 hover:bg-accent hover:text-on-accent hover:border-accent cursor-grab active:cursor-grabbing'
+                ]"
+                @pointerdown="startChordDrag(i, ci, c.chord, c.column, $event)"
               >
-                <IconCheck class="text-xs" />
-              </button>
+                <!-- Grip handle dots icon -->
+                <span class="text-[0.65em] opacity-40 group-hover/btn:opacity-90 transition-opacity select-none -ml-[0.1em]">⋮</span>
+                <span>{{ c.chord }}</span>
 
-              <button
-                v-if="editing.chordIndex !== null"
-                type="button"
-                class="flex size-6.5 items-center justify-center rounded-lg border border-line bg-surface text-muted hover:border-danger hover:bg-danger/10 hover:text-danger active:scale-95 transition cursor-pointer shrink-0"
-                title="Ukloni akord sa ovog mjesta"
-                aria-label="Ukloni akord"
-                @mousedown.prevent="drop()"
-              >
-                <IconDelete class="text-xs" />
-              </button>
-
-              <button
-                type="button"
-                class="flex size-6.5 items-center justify-center rounded-lg text-muted hover:text-ink hover:bg-raised active:scale-95 transition cursor-pointer shrink-0"
-                title="Zatvori (Esc)"
-                aria-label="Zatvori"
-                @mousedown.prevent="editing = null"
-              >
-                <IconClose class="text-xs" />
+                <!-- Precision alignment pointer arrow pointing down to exact syllable -->
+                <span
+                  class="pointer-events-none absolute -bottom-[0.35em] left-1/2 -translate-x-1/2 size-0 border-x-[0.2em] border-x-transparent border-t-[0.35em]"
+                  :class="draggingChord?.lineIndex === i && draggingChord?.chordIndex === ci ? 'border-t-accent' : 'border-t-accent/60 group-hover/btn:border-t-accent'"
+                />
               </button>
             </div>
+          </div>
 
-            <!-- Quick Chord Suggestions from Song Context -->
-            <div v-if="allSongChords.length" class="flex flex-wrap items-center gap-1 max-w-[13.5rem] pt-1 border-t border-line-soft">
-              <button
-                v-for="sc in allSongChords"
-                :key="sc"
-                type="button"
-                class="rounded-md bg-raised border border-line px-1.5 py-0.5 text-[11px] font-mono font-bold text-accent hover:bg-accent hover:text-on-accent hover:border-accent active:scale-95 transition shadow-2xs cursor-pointer"
-                :title="'Izaberi ' + sc"
-                @mousedown.prevent="selectQuickChord(sc)"
-              >
-                {{ sc }}
-              </button>
+          <!-- Editable Lyric Text Line -->
+          <div class="relative flex items-center mt-[0.1em]">
+            <input
+              :value="line.plain"
+              type="text"
+              spellcheck="false"
+              :data-line-input="i"
+              placeholder="Unesite stih..."
+              class="w-full bg-transparent px-[0.2em] py-[0.05em] text-ink font-semibold font-mono text-[1em] leading-normal outline-none border-b border-transparent focus:border-accent focus:bg-surface/50 hover:border-line-soft rounded transition-all placeholder:text-faint/40 placeholder:font-sans placeholder:text-[0.75em]"
+              @input="onPlainInput(i, $event.target.value)"
+              @keydown="onLyricKeydown(i, $event)"
+            />
+            <button
+              type="button"
+              class="opacity-0 group-hover/line:opacity-60 hover:!opacity-100 p-1 text-faint hover:text-danger rounded transition cursor-pointer text-xs shrink-0"
+              title="Obriši stih"
+              @click="deleteLine(i)"
+            >
+              <IconDelete class="text-xs" />
+            </button>
+          </div>
+
+          <!-- Modern Floating Chord Popover -->
+          <div
+            v-if="editing?.lineIndex === i"
+            data-chord-popover
+            class="absolute z-50 -top-12 select-none"
+            :style="{ left: Math.max(0, (editing.column * charWidth) - 8) + 'px' }"
+            @click.stop
+            @pointerdown.stop
+            @mousedown.stop
+          >
+            <!-- Floating Capsule Card -->
+            <div class="relative flex flex-col gap-1.5 rounded-xl border border-line-strong bg-panel/95 backdrop-blur-xl p-1.5 shadow-2xl ring-1 ring-black/20">
+              <!-- Top Input Row -->
+              <div class="flex items-center gap-1.5">
+                <input
+                  ref="input"
+                  v-model="editing.value"
+                  class="w-20 rounded-lg bg-surface px-2 py-0.5 text-xs font-black font-mono text-accent uppercase tracking-wider outline-none border border-line focus:border-accent focus:ring-1 focus:ring-accent transition shadow-2xs placeholder:text-faint/40 placeholder:normal-case"
+                  placeholder="npr. Am"
+                  @keydown.enter.prevent="commit"
+                  @keydown.esc.prevent="editing = null"
+                />
+
+                <button
+                  type="button"
+                  class="flex size-6.5 items-center justify-center rounded-lg bg-accent text-on-accent hover:brightness-110 active:scale-95 transition shadow-xs cursor-pointer font-bold shrink-0"
+                  title="Sačuvaj akord (Enter)"
+                  aria-label="Sačuvaj akord"
+                  @mousedown.prevent="commit"
+                >
+                  <IconCheck class="text-xs" />
+                </button>
+
+                <button
+                  v-if="editing.chordIndex !== null"
+                  type="button"
+                  class="flex size-6.5 items-center justify-center rounded-lg border border-line bg-surface text-muted hover:border-danger hover:bg-danger/10 hover:text-danger active:scale-95 transition cursor-pointer shrink-0"
+                  title="Ukloni akord sa ovog mjesta"
+                  aria-label="Ukloni akord"
+                  @mousedown.prevent="drop()"
+                >
+                  <IconDelete class="text-xs" />
+                </button>
+
+                <button
+                  type="button"
+                  class="flex size-6.5 items-center justify-center rounded-lg text-muted hover:text-ink hover:bg-raised active:scale-95 transition cursor-pointer shrink-0"
+                  title="Zatvori (Esc)"
+                  aria-label="Zatvori"
+                  @mousedown.prevent="editing = null"
+                >
+                  <IconClose class="text-xs" />
+                </button>
+              </div>
+
+              <!-- Quick Chord Suggestions from Song Context -->
+              <div v-if="allSongChords.length" class="flex flex-wrap items-center gap-1 max-w-[13.5rem] pt-1 border-t border-line-soft">
+                <button
+                  v-for="sc in allSongChords"
+                  :key="sc"
+                  type="button"
+                  class="rounded-md bg-raised border border-line px-1.5 py-0.5 text-[11px] font-mono font-bold text-accent hover:bg-accent hover:text-on-accent hover:border-accent active:scale-95 transition shadow-2xs cursor-pointer"
+                  :title="'Izaberi ' + sc"
+                  @mousedown.prevent="selectQuickChord(sc)"
+                >
+                  {{ sc }}
+                </button>
+              </div>
+
+              <!-- Pointer Arrow Caret pointing down to the exact syllable -->
+              <div class="pointer-events-none absolute -bottom-1.5 left-4 size-0 border-x-[5px] border-x-transparent border-t-[6px] border-t-line-strong" />
+              <div class="pointer-events-none absolute -bottom-1 left-4 size-0 border-x-[4px] border-x-transparent border-t-[5px] border-t-panel" />
             </div>
-
-            <!-- Pointer Arrow Caret pointing down to the exact syllable -->
-            <div class="pointer-events-none absolute -bottom-1.5 left-4 size-0 border-x-[5px] border-x-transparent border-t-[6px] border-t-line-strong" />
-            <div class="pointer-events-none absolute -bottom-1 left-4 size-0 border-x-[4px] border-x-transparent border-t-[5px] border-t-panel" />
           </div>
         </div>
-      </div>
-    </template>
+      </template>
+    </div>
 
     <!-- Bottom Quick Add Actions Bar -->
     <div class="mt-4 pt-3 border-t border-line-soft/80 flex flex-wrap items-center gap-2">
       <button
         type="button"
-        class="rounded border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent transition flex items-center gap-1 font-sans font-medium cursor-pointer shadow-2xs"
+        class="rounded-lg border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent transition flex items-center gap-1 font-sans font-medium cursor-pointer shadow-2xs"
         @click="insertLineAfter(rawLines.length - 1, '')"
       >
         + Novi stih
       </button>
       <button
         type="button"
-        class="rounded border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent transition flex items-center gap-1 font-sans font-medium cursor-pointer shadow-2xs"
+        class="rounded-lg border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent transition flex items-center gap-1 font-sans font-medium cursor-pointer shadow-2xs"
         @click="insertLineAfter(rawLines.length - 1, '[Refren]')"
       >
         + [Refren]
       </button>
       <button
         type="button"
-        class="rounded border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent transition flex items-center gap-1 font-sans font-medium cursor-pointer shadow-2xs"
+        class="rounded-lg border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent transition flex items-center gap-1 font-sans font-medium cursor-pointer shadow-2xs"
         @click="insertLineAfter(rawLines.length - 1, '[Strofa]')"
       >
         + [Strofa]
       </button>
       <button
         type="button"
-        class="rounded border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent transition flex items-center gap-1 font-sans font-medium cursor-pointer shadow-2xs"
+        class="rounded-lg border border-line-strong bg-panel px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent transition flex items-center gap-1 font-sans font-medium cursor-pointer shadow-2xs"
         @click="insertLineAfter(rawLines.length - 1, '[Solo]')"
       >
         + [Solo]

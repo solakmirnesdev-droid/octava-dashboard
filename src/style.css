@@ -166,6 +166,128 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Suppress native search cancel/clear button so custom Vue clear icons don't duplicate */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/*
+ * Centralized UI Primitives & Utilities
+ *
+ * AI-DECISION: button, input, card, badge, and popover shapes are standardized
+ * here so pages and components don't drift with ad-hoc paddings and borders.
+ */
+
+/* --- Buttons --- */
+@utility btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2 
+         text-xs sm:text-sm font-bold text-on-accent shadow-xs shadow-accent/20 
+         hover:brightness-110 hover:shadow-md hover:shadow-accent/25 hover:-translate-y-0.5 
+         active:translate-y-0 active:scale-[0.98] transition-all duration-150 
+         disabled:opacity-50 disabled:pointer-events-none outline-none cursor-pointer;
+}
+
+@utility btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line-strong 
+         bg-panel px-4 py-2 text-xs sm:text-sm font-semibold text-ink shadow-2xs
+         hover:border-accent hover:text-accent hover:bg-panel hover:shadow-xs 
+         hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] 
+         transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none outline-none cursor-pointer;
+}
+
+@utility btn-ghost {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 
+         text-xs sm:text-sm font-medium text-muted hover:text-ink hover:bg-raised 
+         active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none outline-none cursor-pointer;
+}
+
+@utility btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-danger px-4 py-2 
+         text-xs sm:text-sm font-bold text-on-danger shadow-xs shadow-danger/20 
+         hover:brightness-110 hover:shadow-md hover:shadow-danger/25 hover:-translate-y-0.5 
+         active:translate-y-0 active:scale-[0.98] transition-all duration-150 
+         disabled:opacity-50 disabled:pointer-events-none outline-none cursor-pointer;
+}
+
+@utility btn-accent {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-accent/30 
+         bg-accent-soft px-4 py-2 text-xs sm:text-sm font-bold text-accent shadow-2xs 
+         hover:bg-accent hover:text-on-accent hover:-translate-y-0.5 active:translate-y-0 
+         active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none outline-none cursor-pointer;
+}
+
+/* --- Form Controls --- */
+@utility input-base {
+  @apply w-full rounded-xl border border-line-strong bg-panel px-3.5 py-2 
+         text-base sm:text-xs font-medium text-ink placeholder:text-faint 
+         hover:border-accent/70 focus:border-accent focus:bg-panel focus:outline-none 
+         focus:ring-2 focus:ring-accent/15 transition-all duration-150 shadow-2xs;
+}
+
+@utility textarea-base {
+  @apply w-full rounded-xl border border-line-strong bg-panel px-3.5 py-2.5 
+         text-base sm:text-xs font-medium text-ink placeholder:text-faint 
+         hover:border-accent/70 focus:border-accent focus:bg-panel focus:outline-none 
+         focus:ring-2 focus:ring-accent/15 transition-all duration-150 shadow-2xs resize-none;
+}
+
+@utility select-base {
+  @apply w-full rounded-xl border border-line-strong bg-panel px-3 py-2 
+         text-base sm:text-xs font-medium text-ink 
+         hover:border-accent/70 focus:border-accent focus:bg-panel focus:outline-none 
+         focus:ring-2 focus:ring-accent/15 transition-all duration-150 shadow-2xs cursor-pointer;
+}
+
+/* --- Cards & Panels --- */
+@utility card-base {
+  @apply rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-2xs;
+}
+
+@utility card-interactive {
+  @apply rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-2xs 
+         hover:border-accent hover:shadow-xs hover:-translate-y-0.5 
+         active:translate-y-0 transition-all duration-150 cursor-pointer;
+}
+
+@utility card-glass {
+  @apply rounded-2xl border border-line/80 bg-panel/80 backdrop-blur-md p-4 sm:p-5 shadow-2xs;
+}
+
+@utility card-sunken {
+  @apply rounded-2xl border border-line bg-surface/70 p-4 sm:p-5 shadow-inner;
+}
+
+/* --- Badges & Status Pills --- */
+@utility badge-pill {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-line 
+         bg-surface/80 px-2.5 py-0.5 text-xs font-medium text-muted transition-colors;
+}
+
+@utility badge-accent {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-accent/30 
+         bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent transition-colors;
+}
+
+@utility badge-ok {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-ok/30 
+         bg-ok-soft px-2.5 py-0.5 text-xs font-bold text-ok transition-colors;
+}
+
+@utility badge-warn {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-warn/30 
+         bg-warn-soft px-2.5 py-0.5 text-xs font-bold text-warn transition-colors;
+}
+
+@utility badge-danger {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-danger/30 
+         bg-danger-soft px-2.5 py-0.5 text-xs font-bold text-danger transition-colors;
+}
+
 /* =========================================================================
    Live Update & Attention-Grabbing Glow & Pulse Animations
    ========================================================================= */

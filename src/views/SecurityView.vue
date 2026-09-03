@@ -4,6 +4,7 @@ import AppModal from '../components/AppModal.vue';
 import client from '../api/client';
 import { useAuthStore } from '../stores/auth';
 import { useToasts } from '../composables/useToasts';
+import { AppCard, AppBadge, AppButton } from '../components/ui';
 import IconMail from '~icons/material-symbols/mail-outline-rounded';
 import IconShield from '~icons/material-symbols/shield-outline-rounded';
 import IconCheck from '~icons/material-symbols/check-circle-outline-rounded';
@@ -67,8 +68,6 @@ async function confirmMail() {
   mailBusy.value = true;
   try {
     const { data } = await client.post('/auth/staff/2fa/email/enable', { code: mailCode.value.trim() });
-    // Only minted when the account had none; an authenticator set up earlier
-    // already handed them over and they are not shown twice.
     if (data.backupCodes?.length) {
       backupCodes.value = data.backupCodes;
       acknowledged.value = false;
@@ -80,7 +79,7 @@ async function confirmMail() {
     mailPassword.value = '';
     toasts.success('Potvrda mailom je uključena.');
   } catch (err) {
-    toasts.error(err.response?.data?.message || 'Kod nije prihvaćen.');
+    toasts.error(err.response?.data?.message || 'Kod nije tačan.');
   } finally {
     mailBusy.value = false;
   }
@@ -91,6 +90,7 @@ async function disableMail() {
   try {
     await client.post('/auth/staff/2fa/email/disable', { password: mailPassword.value });
     await auth.fetchMe();
+    mailStage.value = 'idle';
     mailPassword.value = '';
     toasts.success('Potvrda mailom je isključena.');
   } catch (err) {
@@ -102,21 +102,24 @@ async function disableMail() {
 
 function reset() {
   stage.value = 'idle';
-  qr.value = null; secret.value = ''; code.value = ''; password.value = '';
-  backupCodes.value = []; acknowledged.value = false;
+  qr.value = null;
+  secret.value = '';
+  code.value = '';
+  password.value = '';
+  backupCodes.value = [];
+  acknowledged.value = false;
 }
 
 async function startSetup() {
   busy.value = true;
   try {
     const { data } = await client.post('/auth/staff/2fa/setup');
-    // The response key is `qr`, not `dataUrl` — that is the controller's own
-    // local variable name, and reading it here left the QR silently blank.
     qr.value = data.qr;
     secret.value = data.secret;
     stage.value = 'scanning';
+    code.value = '';
   } catch (err) {
-    toasts.error(err.response?.data?.message || 'Pokretanje nije uspjelo.');
+    toasts.error(err.response?.data?.message || 'Nije uspjelo pokretanje.');
   } finally {
     busy.value = false;
   }
@@ -128,24 +131,29 @@ async function confirmEnable() {
   try {
     const { data } = await client.post('/auth/staff/2fa/enable', { code: code.value.trim() });
     backupCodes.value = data.backupCodes || [];
+    acknowledged.value = false;
     stage.value = 'codes';
     await auth.fetchMe();
     toasts.success('Dvostruka potvrda je uključena.');
   } catch (err) {
-    toasts.error(err.response?.data?.message || 'Kod nije prihvaćen.');
+    toasts.error(err.response?.data?.message || 'Kod nije tačan.');
   } finally {
     busy.value = false;
   }
 }
 
 async function regenerate() {
+  if (!password.value) return;
   busy.value = true;
   try {
-    const { data } = await client.post('/auth/staff/2fa/backup-codes', { password: password.value });
+    const { data } = await client.post('/auth/staff/2fa/backup-codes/regenerate', {
+      password: password.value
+    });
     backupCodes.value = data.backupCodes || [];
+    acknowledged.value = false;
     stage.value = 'codes';
     password.value = '';
-    toasts.success('Novi rezervni kodovi napravljeni. Stari više ne vrijede.');
+    toasts.success('Novi rezervni kodovi su napravljeni.');
   } catch (err) {
     toasts.error(err.response?.data?.message || 'Nije uspjelo.');
   } finally {
@@ -166,30 +174,29 @@ async function disable() {
     reset();
     toasts.success('Dvostruka potvrda je isključena.');
   } catch (err) {
-    toasts.error(err.response?.data?.message || 'Nije uspjelo.');
+    toasts.error(err.response?.data?.message || 'Isključivanje nije uspjelo.');
   } finally {
     busy.value = false;
   }
 }
 
-const codesAsText = computed(() =>
-  `Octava — rezervni kodovi za ${auth.user?.email || ''}\n`
-  + `Napravljeni ${new Date().toLocaleString('bs')}\n\n`
-  + backupCodes.value.map((c, i) => `${i + 1}. ${c}`).join('\n')
-  + '\n\nSvaki kod vrijedi jednom. Čuvaj ih odvojeno od telefona.\n'
-);
-
-async function copyCodes() {
-  try {
-    await navigator.clipboard.writeText(codesAsText.value);
-    toasts.success('Kodovi kopirani.');
-  } catch {
-    toasts.error('Kopiranje nije uspjelo — označi ih i kopiraj ručno.');
-  }
+function copyCodes() {
+  const text = backupCodes.value.map((c, i) => `${i + 1}. ${c}`).join('\n');
+  navigator.clipboard.writeText(text);
+  toasts.success('Kodovi kopirani u međuspremnik.');
 }
 
 function downloadCodes() {
-  const blob = new Blob([codesAsText.value], { type: 'text/plain;charset=utf-8' });
+  const text = [
+    `Octava — rezervni kodovi za ${auth.user?.email || 'urednički nalog'}`,
+    `Datum: ${new Date().toISOString().slice(0, 10)}`,
+    '',
+    ...backupCodes.value.map((c, i) => `${i + 1}. ${c}`),
+    '',
+    'Svaki kod vrijedi samo jednom. Čuvaj ih odvojeno od lozinke.'
+  ].join('\n');
+
+  const blob = new Blob([text], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -216,7 +223,7 @@ function finishCodes() {
     </div>
 
     <!-- Card 1: App TOTP Authenticator -->
-    <div class="rounded-2xl border border-line bg-panel p-5 sm:p-6 shadow-2xs">
+    <AppCard class="shadow-2xs">
       <div class="flex flex-wrap items-center gap-3">
         <div class="size-10 rounded-xl flex items-center justify-center" :class="enabled ? 'bg-ok-soft text-ok' : 'bg-raised text-muted'">
           <IconShield class="text-2xl" />
@@ -229,27 +236,36 @@ function finishCodes() {
               : 'Isključena — nalog čuva samo lozinka.' }}
           </p>
         </div>
-        <span
-          class="ml-auto rounded-full px-2.5 py-0.5 text-xs font-bold font-mono"
-          :class="enabled ? 'bg-ok-soft text-ok border border-ok/30' : 'bg-raised text-muted border border-line-soft'"
-        >{{ enabled ? 'aktivna' : 'neaktivna' }}</span>
+        <AppBadge
+          class="ml-auto"
+          :variant="enabled ? 'ok' : 'neutral'"
+          size="sm"
+          dot
+        >
+          {{ enabled ? 'aktivna' : 'neaktivna' }}
+        </AppBadge>
       </div>
 
       <!-- Off, nothing started -->
       <template v-if="!enabled && stage === 'idle'">
-        <p class="mt-4 text-xs sm:text-sm text-body leading-relaxed bg-surface/50 p-3 rounded-xl border border-line-soft">
+        <p class="mt-4 text-xs sm:text-sm text-ink leading-relaxed bg-surface/50 p-3 rounded-xl border border-line-soft">
           Trebat će vam aplikacija za kodove na telefonu — Google Authenticator,
           Aegis, 1Password, Bitwarden ili slična.
         </p>
-        <button
-          class="mt-4 rounded-xl bg-ink px-4 py-2 text-xs sm:text-sm font-bold text-on-ink hover:bg-accent disabled:opacity-50 transition shadow-2xs cursor-pointer active:scale-95"
-          :disabled="busy" @click="startSetup"
-        >{{ busy ? 'Trenutak…' : 'Uključi dvostruku potvrdu' }}</button>
+        <AppButton
+          class="mt-4"
+          variant="primary"
+          size="sm"
+          :loading="busy"
+          @click="startSetup"
+        >
+          Uključi dvostruku potvrdu
+        </AppButton>
       </template>
 
       <!-- Scanning -->
       <template v-else-if="stage === 'scanning'">
-        <p class="mt-4 text-xs sm:text-sm text-body">
+        <p class="mt-4 text-xs sm:text-sm text-ink">
           Skeniraj kod aplikacijom, pa upiši šestocifreni broj koji ti pokaže.
         </p>
 
@@ -264,7 +280,7 @@ function finishCodes() {
               <span class="text-xs font-bold text-ink">Kod iz aplikacije</span>
               <input
                 v-model="code" inputmode="numeric" maxlength="6" placeholder="123456"
-                class="mt-1 w-44 rounded-xl border border-line bg-surface px-3 py-2 font-mono text-base tracking-widest outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                class="mt-1 w-44 rounded-xl border border-line-strong bg-panel px-3 py-2 font-mono text-base tracking-widest outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                 @keyup.enter="confirmEnable"
               >
             </label>
@@ -272,11 +288,16 @@ function finishCodes() {
         </div>
 
         <div class="mt-4 flex gap-2">
-          <button class="rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold text-muted hover:text-ink hover:bg-raised transition cursor-pointer" @click="reset">Odustani</button>
-          <button
-            class="rounded-xl bg-ink px-4 py-2 text-xs sm:text-sm font-bold text-on-ink hover:bg-accent disabled:opacity-50 transition shadow-2xs active:scale-95 cursor-pointer"
-            :disabled="busy || code.trim().length < 6" @click="confirmEnable"
-          >{{ busy ? 'Provjeravam…' : 'Potvrdi' }}</button>
+          <AppButton variant="ghost" size="sm" @click="reset">Odustani</AppButton>
+          <AppButton
+            variant="primary"
+            size="sm"
+            :disabled="busy || code.trim().length < 6"
+            :loading="busy"
+            @click="confirmEnable"
+          >
+            Potvrdi
+          </AppButton>
         </div>
       </template>
 
@@ -300,12 +321,14 @@ function finishCodes() {
         </ul>
 
         <div class="mt-4 flex flex-wrap gap-2">
-          <button class="rounded-xl border border-line bg-surface px-4 py-2 text-xs sm:text-sm font-semibold hover:border-line-strong transition cursor-pointer" @click="copyCodes">
-            <span class="flex items-center gap-1.5"><IconCopy /> Kopiraj</span>
-          </button>
-          <button class="rounded-xl border border-line bg-surface px-4 py-2 text-xs sm:text-sm font-semibold hover:border-line-strong transition cursor-pointer" @click="downloadCodes">
-            <span class="flex items-center gap-1.5"><IconDownload /> Preuzmi</span>
-          </button>
+          <AppButton variant="secondary" size="xs" @click="copyCodes">
+            <template #icon><IconCopy /></template>
+            Kopiraj
+          </AppButton>
+          <AppButton variant="secondary" size="xs" @click="downloadCodes">
+            <template #icon><IconDownload /></template>
+            Preuzmi
+          </AppButton>
         </div>
 
         <label class="mt-4 flex items-center gap-2 text-xs sm:text-sm font-medium text-ink cursor-pointer">
@@ -313,10 +336,15 @@ function finishCodes() {
           Sačuvao sam kodove na sigurno mjesto
         </label>
 
-        <button
-          class="mt-3 rounded-xl bg-ink px-4 py-2 text-xs sm:text-sm font-bold text-on-ink hover:bg-accent disabled:opacity-50 transition shadow-2xs active:scale-95 cursor-pointer"
-          :disabled="!acknowledged" @click="finishCodes"
-        >Gotovo</button>
+        <AppButton
+          class="mt-3"
+          variant="primary"
+          size="sm"
+          :disabled="!acknowledged"
+          @click="finishCodes"
+        >
+          Gotovo
+        </AppButton>
       </template>
 
       <!-- On -->
@@ -333,13 +361,17 @@ function finishCodes() {
               <span class="text-xs font-medium text-muted">Lozinka naloga</span>
               <input
                 v-model="password" type="password" autocomplete="current-password"
-                class="mt-1 w-56 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
+                class="mt-1 w-56 rounded-xl border border-line-strong bg-panel px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
               >
             </label>
-            <button
-              class="rounded-xl border border-line bg-surface px-3.5 py-1.5 text-xs font-bold text-ink hover:border-line-strong transition disabled:opacity-50 cursor-pointer"
-              :disabled="busy || !password" @click="regenerate"
-            >Napravi nove</button>
+            <AppButton
+              variant="secondary"
+              size="xs"
+              :disabled="busy || !password"
+              @click="regenerate"
+            >
+              Napravi nove
+            </AppButton>
           </div>
         </div>
 
@@ -351,27 +383,31 @@ function finishCodes() {
               <span class="text-xs font-medium text-muted">Lozinka naloga</span>
               <input
                 v-model="password" type="password" autocomplete="current-password"
-                class="mt-1 w-56 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
+                class="mt-1 w-56 rounded-xl border border-line-strong bg-panel px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
               >
             </label>
             <label class="block">
               <span class="text-xs font-medium text-muted">Kod</span>
               <input
                 v-model="code" inputmode="numeric" maxlength="6"
-                class="mt-1 w-28 rounded-xl border border-line bg-surface px-3 py-1.5 font-mono text-xs tracking-widest outline-none focus:border-accent"
+                class="mt-1 w-28 rounded-xl border border-line-strong bg-panel px-3 py-1.5 font-mono text-xs tracking-widest outline-none focus:border-accent"
               >
             </label>
-            <button
-              class="rounded-xl bg-danger-soft text-danger hover:bg-danger hover:text-on-danger border border-danger/30 px-3.5 py-1.5 text-xs font-bold transition disabled:opacity-50 cursor-pointer"
-              :disabled="busy || !password || code.trim().length < 6" @click="disabling = true"
-            >Isključi</button>
+            <AppButton
+              variant="danger"
+              size="xs"
+              :disabled="busy || !password || code.trim().length < 6"
+              @click="disabling = true"
+            >
+              Isključi
+            </AppButton>
           </div>
         </div>
       </template>
-    </div>
+    </AppCard>
   
     <!-- Card 2: Email codes -->
-    <div class="mt-4 rounded-2xl border border-line bg-panel p-5 sm:p-6 shadow-2xs">
+    <AppCard class="mt-4 shadow-2xs">
       <div class="flex flex-wrap items-center gap-3">
         <div class="size-10 rounded-xl flex items-center justify-center" :class="mailOn ? 'bg-ok-soft text-ok' : 'bg-raised text-muted'">
           <IconMail class="text-2xl" />
@@ -384,14 +420,18 @@ function finishCodes() {
               : 'Kod na email umjesto mobilne aplikacije za kodove.' }}
           </p>
         </div>
-        <span
-          class="ml-auto rounded-full px-2.5 py-0.5 text-xs font-bold font-mono"
-          :class="mailOn ? 'bg-ok-soft text-ok border border-ok/30' : 'bg-raised text-muted border border-line-soft'"
-        >{{ mailOn ? 'aktivna' : 'neaktivna' }}</span>
+        <AppBadge
+          class="ml-auto"
+          :variant="mailOn ? 'ok' : 'neutral'"
+          size="sm"
+          dot
+        >
+          {{ mailOn ? 'aktivna' : 'neaktivna' }}
+        </AppBadge>
       </div>
 
       <template v-if="!mailOn && mailStage === 'idle'">
-        <p class="mt-4 text-xs sm:text-sm text-body leading-relaxed bg-surface/50 p-3 rounded-xl border border-line-soft">
+        <p class="mt-4 text-xs sm:text-sm text-ink leading-relaxed bg-surface/50 p-3 rounded-xl border border-line-soft">
           Poslat ćemo kod na tvoju adresu da provjerimo da stiže. Bez toga bi
           uključivanje moglo zaključati nalog.
         </p>
@@ -400,31 +440,41 @@ function finishCodes() {
             <span class="text-xs text-muted font-medium">Lozinka</span>
             <input
               v-model="mailPassword" type="password" autocomplete="current-password"
-              class="mt-1 w-56 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
+              class="mt-1 w-56 rounded-xl border border-line-strong bg-panel px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
             >
           </label>
-          <button
-            class="rounded-xl bg-ink px-4 py-2 text-xs sm:text-sm font-bold text-on-ink hover:bg-accent disabled:opacity-50 transition shadow-2xs active:scale-95 cursor-pointer"
-            :disabled="mailBusy || !mailPassword" @click="sendMailCode"
-          >{{ mailBusy ? 'Šaljem…' : 'Pošalji kod' }}</button>
+          <AppButton
+            variant="primary"
+            size="sm"
+            :loading="mailBusy"
+            :disabled="mailBusy || !mailPassword"
+            @click="sendMailCode"
+          >
+            Pošalji kod
+          </AppButton>
         </div>
       </template>
 
       <template v-else-if="!mailOn && mailStage === 'sent'">
-        <p class="mt-4 text-xs sm:text-sm text-body">
+        <p class="mt-4 text-xs sm:text-sm text-ink">
           Upiši šestocifreni kod iz maila. Vrijedi 10 minuta.
         </p>
         <div class="mt-4 flex flex-wrap items-end gap-3">
           <input
             v-model="mailCode" inputmode="numeric" maxlength="6" placeholder="000000"
-            class="w-36 rounded-xl border border-line bg-surface px-3 py-2 text-center font-mono text-lg outline-none focus:border-accent"
+            class="w-36 rounded-xl border border-line-strong bg-panel px-3 py-2 text-center font-mono text-lg outline-none focus:border-accent"
             @keyup.enter="confirmMail"
           >
-          <button
-            class="rounded-xl bg-ink px-4 py-2 text-xs sm:text-sm font-bold text-on-ink hover:bg-accent disabled:opacity-50 transition shadow-2xs active:scale-95 cursor-pointer"
-            :disabled="mailBusy || mailCode.trim().length < 6" @click="confirmMail"
-          >Uključi</button>
-          <button class="px-3 py-2 text-xs sm:text-sm font-semibold text-muted hover:text-ink hover:bg-raised rounded-xl transition cursor-pointer" @click="mailStage = 'idle'">Odustani</button>
+          <AppButton
+            variant="primary"
+            size="sm"
+            :disabled="mailBusy || mailCode.trim().length < 6"
+            :loading="mailBusy"
+            @click="confirmMail"
+          >
+            Uključi
+          </AppButton>
+          <AppButton variant="ghost" size="sm" @click="mailStage = 'idle'">Odustani</AppButton>
         </div>
       </template>
 
@@ -434,16 +484,20 @@ function finishCodes() {
             <span class="text-xs text-muted font-medium">Lozinka naloga</span>
             <input
               v-model="mailPassword" type="password" autocomplete="current-password"
-              class="mt-1 w-56 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
+              class="mt-1 w-56 rounded-xl border border-line-strong bg-panel px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
             >
           </label>
-          <button
-            class="rounded-xl bg-danger-soft text-danger hover:bg-danger hover:text-on-danger border border-danger/30 px-3.5 py-1.5 text-xs font-bold transition disabled:opacity-50 cursor-pointer"
-            :disabled="mailBusy || !mailPassword" @click="mailDisabling = true"
-          >Isključi</button>
+          <AppButton
+            variant="danger"
+            size="xs"
+            :disabled="mailBusy || !mailPassword"
+            @click="mailDisabling = true"
+          >
+            Isključi
+          </AppButton>
         </div>
       </template>
-    </div>
+    </AppCard>
 
     <AppModal
       v-model="mailDisabling"

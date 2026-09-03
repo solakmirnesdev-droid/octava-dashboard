@@ -4,14 +4,13 @@ import client from '../api/client';
 import { useRefreshOnVisible } from '../composables/useRefreshOnVisible';
 import { useToasts } from '../composables/useToasts';
 import SkeletonLoader from '../components/SkeletonLoader.vue';
+import { AppCard, AppButton, AppBadge, AppInput, AppSegmentedControl, AppEmptyState, AppPagination } from '../components/ui';
 import IconExternal from '~icons/material-symbols/open-in-new-rounded';
 import IconSearch from '~icons/material-symbols/search-rounded';
 import IconWarning from '~icons/material-symbols/warning-rounded';
 import IconCheckCircle from '~icons/material-symbols/check-circle-rounded';
 import IconCancel from '~icons/material-symbols/cancel-outline-rounded';
 import IconReport from '~icons/material-symbols/report-outline-rounded';
-import IconPrev from '~icons/material-symbols/chevron-left-rounded';
-import IconNext from '~icons/material-symbols/chevron-right-rounded';
 
 /**
  * Issue reports submitted by readers against songs.
@@ -37,12 +36,12 @@ const KINDS = {
   other: 'Drugo'
 };
 
-const KIND_CLASSES = {
-  chords: 'bg-accent-soft text-accent border border-accent/20',
-  lyrics: 'bg-warn-soft text-warn border border-warn/20',
-  key: 'bg-ok-soft text-ok border border-ok/20',
-  duplicate: 'bg-danger-soft text-danger border border-danger/20',
-  other: 'bg-raised text-muted border border-line-soft'
+const KIND_VARIANTS = {
+  chords: 'accent',
+  lyrics: 'warn',
+  key: 'ok',
+  duplicate: 'danger',
+  other: 'neutral'
 };
 
 const STATUSES = [
@@ -129,10 +128,11 @@ onMounted(load);
     <!-- Quick Insights Metric Tiles (Interactive Fast Filters) -->
     <div class="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       <!-- 1. Otvorene -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          status === 'open' ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong',
+          status === 'open' ? '!border-accent ring-2 ring-accent/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="setStatus('open')"
@@ -149,13 +149,14 @@ onMounted(load);
           </span>
           <span class="text-[11px] text-faint">prijava</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- 2. Riješene -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          status === 'resolved' ? 'border-ok ring-2 ring-ok/30' : 'border-line hover:border-line-strong',
+          status === 'resolved' ? '!border-ok ring-2 ring-ok/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="setStatus('resolved')"
@@ -172,13 +173,14 @@ onMounted(load);
           </span>
           <span class="text-[11px] text-faint">prijava</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- 3. Odbijene -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          status === 'rejected' ? 'border-danger ring-2 ring-danger/30' : 'border-line hover:border-line-strong',
+          status === 'rejected' ? '!border-danger ring-2 ring-danger/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="setStatus('rejected')"
@@ -195,13 +197,14 @@ onMounted(load);
           </span>
           <span class="text-[11px] text-faint">prijava</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- 4. Ukupno -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          status === 'all' ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong',
+          status === 'all' ? '!border-accent ring-2 ring-accent/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="setStatus('all')"
@@ -218,59 +221,44 @@ onMounted(load);
           </span>
           <span class="text-[11px] text-faint">u sistemu</span>
         </div>
-      </div>
+      </AppCard>
     </div>
 
     <!-- Navigation Tabs & Search Toolbar -->
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel p-2 shadow-2xs text-xs">
-      <!-- Category Tabs -->
-      <div class="flex items-center gap-1 bg-surface p-1 rounded-xl border border-line-strong overflow-x-auto scrollbar-none">
-        <button
-          v-for="s in STATUSES"
-          :key="s.value"
-          type="button"
-          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition cursor-pointer shrink-0"
-          :class="status === s.value ? 'bg-ink text-on-ink shadow-xs' : 'text-muted hover:text-ink hover:bg-raised'"
-          @click="setStatus(s.value)"
-        >
-          <span>{{ s.label }}</span>
-        </button>
-      </div>
+      <AppSegmentedControl
+        v-model="status"
+        :options="STATUSES"
+        @update:model-value="setStatus"
+      />
 
-      <!-- Search Input -->
-      <div class="relative w-full sm:w-64">
-        <IconSearch class="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm" />
-        <input
+      <div class="w-full sm:w-64">
+        <AppInput
           v-model="searchQuery"
-          type="search"
           placeholder="Pretraži prijave…"
-          class="w-full rounded-xl border border-line bg-surface pl-8 pr-3 py-1.5 text-xs text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-        />
+          clearable
+        >
+          <template #icon>
+            <IconSearch />
+          </template>
+        </AppInput>
       </div>
     </div>
 
     <SkeletonLoader v-if="loading" type="list" :rows="5" />
 
-    <div v-else-if="!filteredItems.length" class="rounded-2xl border border-line bg-panel p-12 text-center shadow-2xs">
-      <IconReport class="mx-auto text-3xl text-dim mb-2" />
-      <p class="text-sm font-bold text-ink">Nema prijava</p>
-      <p class="text-xs text-muted mt-1 max-w-sm mx-auto">
-        {{ searchQuery ? `Nema prijava koje odgovaraju pojmu „${searchQuery}”.` : 'Trenutno nema prijava u ovoj kategoriji.' }}
-      </p>
-    </div>
-
     <!-- Reports List -->
     <div v-else class="space-y-3">
-      <article
+      <AppCard
         v-for="r in filteredItems"
         :key="r._id"
-        class="rounded-2xl border border-line bg-panel p-4 shadow-2xs transition-all hover:border-line-strong hover:shadow-sm"
+        class="transition-all hover:border-line-strong"
       >
         <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-line-soft">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="rounded-full px-2 py-0.2 text-[10px] font-bold font-mono" :class="KIND_CLASSES[r.kind] || KIND_CLASSES.other">
+            <AppBadge :variant="KIND_VARIANTS[r.kind] || 'neutral'" size="xs">
               {{ KINDS[r.kind] || r.kind }}
-            </span>
+            </AppBadge>
 
             <template v-if="r.song">
               <RouterLink
@@ -296,7 +284,7 @@ onMounted(load);
           <span class="font-mono text-[11px] text-faint">{{ when(r.createdAt) }}</span>
         </div>
 
-        <p class="mt-3 text-xs sm:text-sm text-body whitespace-pre-wrap leading-relaxed bg-surface/50 p-3 rounded-xl border border-line-soft font-mono">
+        <p class="mt-3 text-xs sm:text-sm text-ink whitespace-pre-wrap leading-relaxed bg-surface/50 p-3 rounded-xl border border-line-soft font-mono">
           {{ r.body }}
         </p>
 
@@ -307,59 +295,53 @@ onMounted(load);
           <div v-else class="text-faint text-[11px]">Anonimna prijava čitaoca</div>
 
           <div v-if="r.status === 'open'" class="flex items-center gap-2">
-            <button
-              type="button"
-              class="flex items-center gap-1 rounded-xl bg-ok-soft text-ok hover:bg-ok hover:text-on-ok border border-ok/30 px-3 py-1.5 font-bold transition shadow-2xs active:scale-95 cursor-pointer"
+            <AppButton
+              variant="secondary"
+              size="xs"
+              class="!text-ok hover:!border-ok/40 hover:!bg-ok-soft"
               @click="close(r, 'resolved')"
             >
-              <IconCheckCircle class="text-sm" />
-              <span>Označi riješeno</span>
-            </button>
-            <button
-              type="button"
-              class="flex items-center gap-1 rounded-xl bg-danger-soft text-danger hover:bg-danger hover:text-on-danger border border-danger/30 px-3 py-1.5 font-bold transition shadow-2xs active:scale-95 cursor-pointer"
+              <template #icon>
+                <IconCheckCircle class="text-sm" />
+              </template>
+              Označi riješeno
+            </AppButton>
+            <AppButton
+              variant="secondary"
+              size="xs"
+              class="!text-danger hover:!border-danger/40 hover:!bg-danger-soft"
               @click="close(r, 'rejected')"
             >
-              <IconCancel class="text-sm" />
-              <span>Odbij prijavu</span>
-            </button>
+              <template #icon>
+                <IconCancel class="text-sm" />
+              </template>
+              Odbij prijavu
+            </AppButton>
           </div>
           <div v-else class="text-[11px] font-mono">
             Status:
-            <span
-              class="font-bold rounded-md px-1.5 py-0.2"
-              :class="r.status === 'resolved' ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger'"
-            >
+            <AppBadge :variant="r.status === 'resolved' ? 'ok' : 'danger'" size="xs">
               {{ r.status === 'resolved' ? 'Riješeno' : 'Odbijeno' }}
-            </span>
+            </AppBadge>
           </div>
         </div>
-      </article>
+      </AppCard>
+
+      <AppEmptyState
+        v-if="!filteredItems.length"
+        title="Nema prijava"
+        :description="searchQuery ? `Nema prijava koje odgovaraju pojmu „${searchQuery}”.` : 'Trenutno nema prijava u ovoj kategoriji.'"
+      />
     </div>
 
     <!-- Pagination Controls -->
-    <div v-if="pages > 1" class="mt-6 flex items-center justify-center gap-2">
-      <button
-        type="button"
-        class="flex size-8 items-center justify-center rounded-xl border border-line bg-panel text-muted hover:border-line-strong hover:text-ink transition disabled:opacity-40 cursor-pointer"
-        :disabled="page <= 1"
-        @click="page--; load()"
-      >
-        <IconPrev class="text-sm" />
-      </button>
-
-      <span class="font-mono text-xs text-faint px-2">
-        Stranica {{ page }} od {{ pages }}
-      </span>
-
-      <button
-        type="button"
-        class="flex size-8 items-center justify-center rounded-xl border border-line bg-panel text-muted hover:border-line-strong hover:text-ink transition disabled:opacity-40 cursor-pointer"
-        :disabled="page >= pages"
-        @click="page++; load()"
-      >
-        <IconNext class="text-sm" />
-      </button>
-    </div>
+    <AppPagination
+      v-if="pages > 1"
+      :page="page"
+      :total-pages="pages"
+      :total-items="total"
+      :page-size="25"
+      @update:page="page = $event; load()"
+    />
   </section>
 </template>

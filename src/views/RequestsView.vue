@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import client from '../api/client';
 import { useToasts } from '../composables/useToasts';
 import SkeletonLoader from '../components/SkeletonLoader.vue';
+import { AppButton, AppBadge, AppCard, AppInput, AppSegmentedControl, AppEmptyState } from '../components/ui';
 import IconVote from '~icons/material-symbols/thumb-up-outline-rounded';
 import IconAdd from '~icons/material-symbols/add-rounded';
 import IconSearch from '~icons/material-symbols/search-rounded';
@@ -15,11 +16,11 @@ import IconCancel from '~icons/material-symbols/cancel-outline-rounded';
  * Song requests submitted by readers, ranked by reader demand.
  */
 const TABS = [
-  { key: 'open', label: 'Otvoreni' },
-  { key: 'in_progress', label: 'U radu' },
-  { key: 'done', label: 'Riješeni' },
-  { key: 'rejected', label: 'Odbijeni' },
-  { key: 'all', label: 'Svi zahtjevi' }
+  { value: 'open', label: 'Otvoreni' },
+  { value: 'in_progress', label: 'U radu' },
+  { value: 'done', label: 'Riješeni' },
+  { value: 'rejected', label: 'Odbijeni' },
+  { value: 'all', label: 'Svi zahtjevi' }
 ];
 
 const STATUS_LABEL = {
@@ -29,11 +30,11 @@ const STATUS_LABEL = {
   rejected: 'Odbijen'
 };
 
-const STATUS_CLASS = {
-  open: 'bg-accent-soft text-accent border border-accent/20',
-  in_progress: 'bg-warn-soft text-warn border border-warn/20',
-  done: 'bg-ok-soft text-ok border border-ok/20',
-  rejected: 'bg-danger-soft text-danger border border-danger/20'
+const STATUS_VARIANT = {
+  open: 'accent',
+  in_progress: 'warn',
+  done: 'ok',
+  rejected: 'danger'
 };
 
 const router = useRouter();
@@ -129,22 +130,25 @@ const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs', { day: 'nume
         </p>
       </div>
 
-      <RouterLink
+      <AppButton
         :to="{ name: 'song-new' }"
-        class="flex items-center gap-1.5 rounded-xl bg-ink px-3.5 py-2 text-xs sm:text-sm font-bold text-on-ink hover:bg-accent transition shadow-md active:scale-95 cursor-pointer"
+        variant="primary"
+        size="sm"
       >
-        <IconAdd class="text-base" />
-        <span>Nova pjesma</span>
-      </RouterLink>
+        <template #icon>
+          <IconAdd class="text-base" />
+        </template>
+        Nova pjesma
+      </AppButton>
     </div>
 
-    <!-- Quick Insights Metric Tiles (Interactive Fast Filters) -->
+    <!-- Quick Insights Metric Tiles -->
     <div class="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-      <!-- 1. Otvoreni -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          tab === 'open' ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong',
+          tab === 'open' ? '!border-accent ring-2 ring-accent/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="pick('open')"
@@ -161,13 +165,13 @@ const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs', { day: 'nume
           </span>
           <span class="text-[11px] text-faint">zahtjeva</span>
         </div>
-      </div>
+      </AppCard>
 
-      <!-- 2. U radu -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          tab === 'in_progress' ? 'border-warn ring-2 ring-warn/30' : 'border-line hover:border-line-strong',
+          tab === 'in_progress' ? '!border-warn ring-2 ring-warn/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="pick('in_progress')"
@@ -184,13 +188,13 @@ const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs', { day: 'nume
           </span>
           <span class="text-[11px] text-faint">obrađuje se</span>
         </div>
-      </div>
+      </AppCard>
 
-      <!-- 3. Riješeni -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          tab === 'done' ? 'border-ok ring-2 ring-ok/30' : 'border-line hover:border-line-strong',
+          tab === 'done' ? '!border-ok ring-2 ring-ok/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="pick('done')"
@@ -199,133 +203,154 @@ const when = (iso) => (iso ? new Date(iso).toLocaleDateString('bs', { day: 'nume
           <span class="font-medium flex items-center gap-1">
             <IconCheckCircle class="text-sm text-ok" /> Riješeni
           </span>
-          <span class="text-[10px] text-ok font-bold font-mono">U bazi</span>
+          <span class="text-[10px] text-ok font-bold font-mono">Objavljeni</span>
         </div>
         <div class="mt-1.5 flex items-baseline gap-2">
           <span class="font-mono text-2xl sm:text-3xl font-black text-ok" :class="{ 'animate-count-bump': statsPopping }">
             {{ tab === 'done' && meta ? meta.total : doneCount }}
           </span>
-          <span class="text-[11px] text-faint">objavljeno</span>
+          <span class="text-[11px] text-faint">dodano</span>
         </div>
-      </div>
+      </AppCard>
 
-      <!-- 4. Ukupno glasova -->
-      <div
-        class="rounded-2xl border border-line bg-panel p-3.5 shadow-2xs"
-        :class="statsPopping ? 'animate-pulse-glow' : ''"
+      <AppCard
+        variant="interactive"
+        padding="sm"
+        :class="[
+          tab === 'all' ? '!border-line-strong ring-2 ring-ink/10' : '',
+          statsPopping ? 'animate-pulse-glow' : ''
+        ]"
+        @click="pick('all')"
       >
         <div class="flex items-center justify-between text-muted text-xs">
           <span class="font-medium flex items-center gap-1">
-            <IconVote class="text-sm text-accent" /> Ukupno glasova
+            <IconVote class="text-sm text-accent" /> Glasova
           </span>
-          <span class="text-[10px] text-faint font-mono">Potražnja</span>
+          <span class="text-[10px] text-faint font-mono">Ukupno</span>
         </div>
         <div class="mt-1.5 flex items-baseline gap-2">
           <span class="font-mono text-2xl sm:text-3xl font-black text-ink" :class="{ 'animate-count-bump': statsPopping }">
             {{ totalVotes }}
           </span>
-          <span class="text-[11px] text-faint">glasova čitalaca</span>
+          <span class="text-[11px] text-faint">podrške</span>
         </div>
-      </div>
+      </AppCard>
     </div>
 
-    <!-- Navigation Tabs & Search Toolbar -->
+    <!-- Filter Tabs & Real-time Search Toolbar -->
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel p-2 shadow-2xs text-xs">
-      <!-- Category Tabs -->
-      <div class="flex items-center gap-1 bg-surface p-1 rounded-xl border border-line-strong overflow-x-auto scrollbar-none">
-        <button
-          v-for="t in TABS"
-          :key="t.key"
-          type="button"
-          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition cursor-pointer shrink-0"
-          :class="tab === t.key ? 'bg-ink text-on-ink shadow-xs' : 'text-muted hover:text-ink hover:bg-raised'"
-          @click="pick(t.key)"
-        >
-          <span>{{ t.label }}</span>
-        </button>
-      </div>
+      <AppSegmentedControl
+        v-model="tab"
+        :options="TABS"
+        @update:model-value="load"
+      />
 
-      <!-- Search Input -->
-      <div class="relative w-full sm:w-64">
-        <IconSearch class="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm" />
-        <input
+      <div class="w-full sm:w-64">
+        <AppInput
           v-model="searchQuery"
-          type="search"
-          placeholder="Pretraži zahtjeve…"
-          class="w-full rounded-xl border border-line bg-surface pl-8 pr-3 py-1.5 text-xs text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-        />
+          placeholder="Filtriraj po naslovu / izvođaču…"
+          clearable
+        >
+          <template #icon>
+            <IconSearch />
+          </template>
+        </AppInput>
       </div>
     </div>
 
     <SkeletonLoader v-if="loading" type="list" :rows="6" />
 
-    <div v-else-if="!filteredRequests.length" class="rounded-2xl border border-line bg-panel p-12 text-center shadow-2xs">
-      <IconVote class="mx-auto text-3xl text-dim mb-2" />
-      <p class="text-sm font-bold text-ink">Nema zahtjeva</p>
-      <p class="text-xs text-muted mt-1 max-w-sm mx-auto">
-        {{ searchQuery ? `Nema pronađenih zahtjeva za pojam „${searchQuery}”.` : 'Trenutno nema zahtjeva u ovoj kategoriji.' }}
-      </p>
-    </div>
-
-    <!-- Requests List -->
     <div v-else class="space-y-2.5">
-      <article
+      <AppCard
         v-for="r in filteredRequests"
         :key="r._id"
-        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border border-line bg-panel p-4 shadow-2xs transition-all hover:border-line-strong hover:shadow-sm"
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-line-strong transition"
       >
-        <div class="flex items-center gap-3.5 min-w-0 flex-1">
-          <!-- Big Vote Box -->
-          <div class="flex flex-col items-center justify-center rounded-xl border border-accent/20 bg-accent-soft/30 min-w-12 py-1.5 px-2 shrink-0">
-            <IconVote class="text-xs text-accent" />
-            <span class="font-mono text-sm font-black text-accent mt-0.5">{{ r.votes }}</span>
+        <div class="flex items-start gap-3.5 flex-1 min-w-0">
+          <div class="flex flex-col items-center justify-center rounded-xl bg-surface border border-line px-3 py-1.5 min-w-[3.5rem] shadow-2xs">
+            <span class="font-mono text-base font-black text-ink leading-tight flex items-center gap-1">
+              <IconVote class="text-xs text-accent" />
+              {{ r.votes || 1 }}
+            </span>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-faint">glasova</span>
           </div>
 
-          <!-- Title, Artist and Note -->
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
-              <h2 class="font-bold text-sm text-ink truncate">{{ r.title }}</h2>
-              <span class="rounded-full px-2 py-0.2 text-[10px] font-bold font-mono" :class="STATUS_CLASS[r.status]">
-                {{ STATUS_LABEL[r.status] }}
-              </span>
+              <h3 class="font-bold text-sm text-ink truncate">{{ r.title }}</h3>
+              <span class="text-muted font-medium text-xs truncate">· {{ r.artist }}</span>
+              <AppBadge :variant="STATUS_VARIANT[r.status] || 'neutral'" size="xs" dot>
+                {{ STATUS_LABEL[r.status] || r.status }}
+              </AppBadge>
             </div>
-            <p class="text-xs text-muted mt-0.5 truncate font-medium">{{ r.artist }}</p>
-            <p v-if="r.note" class="mt-1 text-xs italic text-faint line-clamp-2 bg-surface/60 p-1.5 rounded-lg border border-line-soft">
-              „{{ r.note }}“
-            </p>
+
+            <div class="mt-1.5 flex items-center gap-3 text-[11px] text-faint">
+              <span>Zatraženo: {{ when(r.createdAt) }}</span>
+              <span v-if="r.email" class="text-muted">od: {{ r.email }}</span>
+            </div>
           </div>
         </div>
 
-        <!-- Meta Date & Action Controls -->
-        <div class="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-line-soft">
-          <span class="font-mono text-[11px] text-faint">{{ when(r.createdAt) }}</span>
+        <!-- Action Controls -->
+        <div class="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+          <AppButton
+            v-if="r.status === 'open' || r.status === 'in_progress'"
+            variant="accent"
+            size="xs"
+            @click="startSong(r)"
+          >
+            <template #icon>
+              <IconAdd />
+            </template>
+            Kreiraj pjesmu
+          </AppButton>
 
-          <div class="flex items-center gap-2">
-            <button
-              v-if="r.status !== 'done'"
-              type="button"
-              class="flex items-center gap-1 rounded-xl bg-ink px-3 py-1.5 text-xs font-bold text-on-ink hover:bg-accent transition shadow-2xs active:scale-95 cursor-pointer disabled:opacity-40"
-              :disabled="busyId === r._id"
-              @click="startSong(r)"
-            >
-              <IconAdd class="text-sm" />
-              <span>Napravi pjesmu</span>
-            </button>
+          <AppButton
+            v-if="r.status === 'open'"
+            variant="secondary"
+            size="xs"
+            :loading="busyId === r._id"
+            @click="setStatus(r, 'in_progress')"
+          >
+            U rad
+          </AppButton>
 
-            <!-- Status Select Menu -->
-            <select
-              class="rounded-xl border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink outline-none transition hover:border-line-strong focus:border-accent cursor-pointer disabled:opacity-40"
-              :value="r.status"
-              :disabled="busyId === r._id"
-              @change="setStatus(r, $event.target.value)"
-            >
-              <option v-for="(label, key) in STATUS_LABEL" :key="key" :value="key">
-                {{ label }}
-              </option>
-            </select>
-          </div>
+          <AppButton
+            v-if="r.status !== 'done'"
+            variant="ghost"
+            size="xs"
+            class="text-ok hover:bg-ok-soft"
+            :loading="busyId === r._id"
+            title="Označi kao riješeno"
+            @click="setStatus(r, 'done')"
+          >
+            <template #icon>
+              <IconCheckCircle />
+            </template>
+            Riješi
+          </AppButton>
+
+          <AppButton
+            v-if="r.status !== 'rejected'"
+            variant="ghost"
+            size="xs"
+            class="text-danger hover:bg-danger-soft"
+            :loading="busyId === r._id"
+            title="Odbij zahtjev"
+            @click="setStatus(r, 'rejected')"
+          >
+            <template #icon>
+              <IconCancel />
+            </template>
+          </AppButton>
         </div>
-      </article>
+      </AppCard>
+
+      <AppEmptyState
+        v-if="!filteredRequests.length"
+        title="Nema pronađenih zahtjeva"
+        :description="searchQuery ? 'Nijedan zahtjev ne odgovara pretrazi.' : 'Nema zahtjeva za odabrani status.'"
+      />
     </div>
   </section>
 </template>

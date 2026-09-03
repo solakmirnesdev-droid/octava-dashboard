@@ -4,13 +4,12 @@ import client from '../api/client';
 import { useLiveData } from '../composables/useLiveData';
 import { useRefreshOnVisible } from '../composables/useRefreshOnVisible';
 import SkeletonLoader from '../components/SkeletonLoader.vue';
+import { AppCard, AppStatsCard, AppSegmentedControl, AppPagination, AppEmptyState } from '../components/ui';
 import IconViews from '~icons/material-symbols/visibility-rounded';
 import IconSaved from '~icons/material-symbols/favorite-rounded';
 import IconRate from '~icons/material-symbols/trending-up-rounded';
 import IconSongs from '~icons/material-symbols/queue-music-rounded';
 import IconHealth from '~icons/material-symbols/ecg-heart-rounded';
-import IconPrev from '~icons/material-symbols/chevron-left-rounded';
-import IconNext from '~icons/material-symbols/chevron-right-rounded';
 
 const overview = ref(null);
 const songs = ref([]);
@@ -30,11 +29,11 @@ const sort = ref('views');
 const page = ref(1);
 
 const SORTS = [
-  { key: 'views', label: 'Najgledanije' },
-  { key: 'favorites', label: 'Najčuvanije' },
-  { key: 'rate', label: 'Najbolja stopa' },
-  { key: 'recent', label: 'Najnovije' },
-  { key: 'gaps', label: 'Rupe u katalogu' }
+  { value: 'views', label: 'Najgledanije' },
+  { value: 'favorites', label: 'Najčuvanije' },
+  { value: 'rate', label: 'Najbolja stopa' },
+  { value: 'recent', label: 'Najnovije' },
+  { value: 'gaps', label: 'Rupe u katalogu' }
 ];
 
 const gaps = ref([]);
@@ -81,10 +80,9 @@ onMounted(() => load());
 useLiveData(['songs', 'artists'], () => load({ fresh: true }));
 useRefreshOnVisible(() => load({ fresh: true }));
 
-function changeSort(key) {
-  sort.value = key;
+watch(sort, () => {
   page.value = 1;
-}
+});
 </script>
 
 <template>
@@ -105,7 +103,7 @@ function changeSort(key) {
 
     <template v-else-if="overview">
       <!-- Catalogue health, first and widest -->
-      <section v-if="overview.health" class="mb-5 rounded-2xl border border-line bg-panel p-5 shadow-2xs">
+      <AppCard v-if="overview.health" class="mb-5">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-faint font-mono">
             <IconHealth class="text-accent text-sm" /> Zdravlje kataloga
@@ -133,101 +131,62 @@ function changeSort(key) {
             {{ overview.health.needsReview }} čeka provjeru
           </span>
         </div>
-      </section>
+      </AppCard>
 
-      <!-- Overview Metric Cards -->
+      <!-- Overview Metric Cards using AppStatsCard -->
       <div class="mb-5 grid gap-2.5 grid-cols-2 lg:grid-cols-4">
-        <!-- 1. Pregleda -->
-        <div
-          class="rounded-2xl border border-line bg-panel p-3.5 sm:p-4 shadow-2xs"
+        <AppStatsCard
+          title="Pregleda"
+          :value="number(overview.views)"
+          :subtitle="overview.seeded?.views ? percent(overview.seeded.views / overview.views) + ' testno' : 'Ukupne posjete'"
           :class="statsPopping ? 'animate-pulse-glow' : ''"
         >
-          <div class="flex items-center justify-between text-muted text-xs">
-            <span class="font-medium flex items-center gap-1">
-              <IconViews class="text-sm text-accent" /> Pregleda
-            </span>
-            <span class="text-[10px] text-faint font-mono">Posjete</span>
-          </div>
-          <div class="mt-1.5 flex items-baseline gap-2">
-            <span class="font-mono text-2xl sm:text-3xl font-black text-ink" :class="{ 'animate-count-bump': statsPopping }">
-              {{ number(overview.views) }}
-            </span>
-          </div>
-          <p v-if="overview.seeded?.views" class="mt-1 text-[10px] text-warn font-mono">
-            {{ percent(overview.seeded.views / overview.views) }} testno
-          </p>
-        </div>
+          <template #icon>
+            <IconViews class="text-sm text-accent" />
+          </template>
+        </AppStatsCard>
 
-        <!-- 2. Sačuvano -->
-        <div
-          class="rounded-2xl border border-line bg-panel p-3.5 sm:p-4 shadow-2xs"
+        <AppStatsCard
+          title="Sačuvano"
+          :value="number(overview.favorites)"
+          subtitle="Dodano u favorite"
           :class="statsPopping ? 'animate-pulse-glow' : ''"
         >
-          <div class="flex items-center justify-between text-muted text-xs">
-            <span class="font-medium flex items-center gap-1">
-              <IconSaved class="text-sm text-accent" /> Sačuvano
-            </span>
-            <span class="text-[10px] text-accent font-bold font-mono">Favoriti</span>
-          </div>
-          <div class="mt-1.5 flex items-baseline gap-2">
-            <span class="font-mono text-2xl sm:text-3xl font-black text-accent" :class="{ 'animate-count-bump': statsPopping }">
-              {{ number(overview.favorites) }}
-            </span>
-          </div>
-        </div>
+          <template #icon>
+            <IconSaved class="text-sm text-accent" />
+          </template>
+        </AppStatsCard>
 
-        <!-- 3. Stopa čuvanja -->
-        <div
-          class="rounded-2xl border border-line bg-panel p-3.5 sm:p-4 shadow-2xs"
+        <AppStatsCard
+          title="Stopa čuvanja"
+          :value="percent(overview.saveRate)"
+          subtitle="Stopa konverzije"
           :class="statsPopping ? 'animate-pulse-glow' : ''"
         >
-          <div class="flex items-center justify-between text-muted text-xs">
-            <span class="font-medium flex items-center gap-1">
-              <IconRate class="text-sm text-ok" /> Stopa čuvanja
-            </span>
-            <span class="text-[10px] text-ok font-bold font-mono">Konverzija</span>
-          </div>
-          <div class="mt-1.5 flex items-baseline gap-2">
-            <span class="font-mono text-2xl sm:text-3xl font-black text-ok" :class="{ 'animate-count-bump': statsPopping }">
-              {{ percent(overview.saveRate) }}
-            </span>
-          </div>
-        </div>
+          <template #icon>
+            <IconRate class="text-sm text-ok" />
+          </template>
+        </AppStatsCard>
 
-        <!-- 4. Pjesama -->
-        <div
-          class="rounded-2xl border border-line bg-panel p-3.5 sm:p-4 shadow-2xs"
+        <AppStatsCard
+          title="Pjesama"
+          :value="number(overview.published)"
+          subtitle="Objavljeno u katalogu"
           :class="statsPopping ? 'animate-pulse-glow' : ''"
         >
-          <div class="flex items-center justify-between text-muted text-xs">
-            <span class="font-medium flex items-center gap-1">
-              <IconSongs class="text-sm text-muted" /> Pjesama
-            </span>
-            <span class="text-[10px] text-faint font-mono">Baza</span>
-          </div>
-          <div class="mt-1.5 flex items-baseline gap-2">
-            <span class="font-mono text-2xl sm:text-3xl font-black text-ink" :class="{ 'animate-count-bump': statsPopping }">
-              {{ number(overview.published) }}
-            </span>
-          </div>
-        </div>
+          <template #icon>
+            <IconSongs class="text-sm text-muted" />
+          </template>
+        </AppStatsCard>
       </div>
     </template>
 
-    <!-- Sort Tabs Toolbar -->
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel p-2 shadow-2xs text-xs">
-      <div class="flex items-center gap-1 bg-surface p-1 rounded-xl border border-line-strong overflow-x-auto scrollbar-none">
-        <button
-          v-for="option in SORTS"
-          :key="option.key"
-          type="button"
-          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold transition cursor-pointer shrink-0"
-          :class="sort === option.key ? 'bg-ink text-on-ink shadow-xs' : 'text-muted hover:text-ink hover:bg-raised'"
-          @click="changeSort(option.key)"
-        >
-          <span>{{ option.label }}</span>
-        </button>
-      </div>
+    <!-- Sort Tabs Toolbar using AppSegmentedControl -->
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <AppSegmentedControl
+        v-model="sort"
+        :options="SORTS"
+      />
     </div>
 
     <SkeletonLoader v-if="loading" type="table" :rows="6" :cols="4" />
@@ -236,10 +195,12 @@ function changeSort(key) {
     <div v-else-if="isGaps">
       <!-- Mobile Card View (< sm) -->
       <div class="sm:hidden space-y-2.5">
-        <div
+        <AppCard
           v-for="a in gaps"
           :key="'mob-gap-' + a._id"
-          class="rounded-2xl border border-line bg-panel p-4 shadow-2xs space-y-2 cursor-pointer active:scale-[0.99] transition"
+          variant="interactive"
+          padding="sm"
+          class="space-y-2"
           @click="$router.push({ name: 'songs', query: { q: a.name } })"
         >
           <div class="flex items-center justify-between">
@@ -249,8 +210,12 @@ function changeSort(key) {
           <div class="h-2 w-full overflow-hidden rounded-full bg-sunken">
             <div class="h-full rounded-full bg-warn" :style="{ width: (a.empty / peakGap * 100) + '%' }" />
           </div>
-        </div>
-        <p v-if="!gaps.length" class="py-8 text-center text-xs text-muted">Nijedan izvođač nema pjesmu bez akorda.</p>
+        </AppCard>
+        <AppEmptyState
+          v-if="!gaps.length"
+          title="Nema rupa u katalogu"
+          description="Nijedan izvođač nema pjesmu bez akorda."
+        />
       </div>
 
       <!-- Desktop Table (>= sm) -->
@@ -297,10 +262,12 @@ function changeSort(key) {
     <div v-else>
       <!-- Mobile Card View (< sm) -->
       <div class="sm:hidden space-y-2.5">
-        <div
+        <AppCard
           v-for="song in songs"
           :key="'mob-stat-' + song._id"
-          class="rounded-2xl border border-line bg-panel p-4 shadow-2xs space-y-2.5 cursor-pointer active:scale-[0.99] transition"
+          variant="interactive"
+          padding="sm"
+          class="space-y-2.5"
           @click="$router.push({ name: 'song-edit', params: { id: song._id } })"
         >
           <div class="flex items-start justify-between gap-2">
@@ -334,8 +301,12 @@ function changeSort(key) {
               </div>
             </div>
           </div>
-        </div>
-        <p v-if="!songs.length" class="py-12 text-center text-xs text-muted">Nema pjesama za prikaz.</p>
+        </AppCard>
+        <AppEmptyState
+          v-if="!songs.length"
+          title="Nema pjesama za prikaz"
+          description="Katalog trenutno nema unesenih pjesama."
+        />
       </div>
 
       <!-- Desktop Table (>= sm) -->
@@ -392,29 +363,14 @@ function changeSort(key) {
       </div>
     </div>
 
-    <!-- Pagination Controls -->
-    <div v-if="meta && meta.pages > 1" class="mt-6 flex items-center justify-center gap-2">
-      <button
-        type="button"
-        class="flex size-8 items-center justify-center rounded-xl border border-line bg-panel text-muted hover:border-line-strong hover:text-ink transition disabled:opacity-40 cursor-pointer"
-        :disabled="page <= 1"
-        @click="page--"
-      >
-        <IconPrev class="text-sm" />
-      </button>
-
-      <span class="font-mono text-xs text-faint px-2">
-        Stranica {{ meta.page }} od {{ meta.pages }}
-      </span>
-
-      <button
-        type="button"
-        class="flex size-8 items-center justify-center rounded-xl border border-line bg-panel text-muted hover:border-line-strong hover:text-ink transition disabled:opacity-40 cursor-pointer"
-        :disabled="page >= meta.pages"
-        @click="page++"
-      >
-        <IconNext class="text-sm" />
-      </button>
-    </div>
+    <!-- Pagination Controls using AppPagination -->
+    <AppPagination
+      v-if="meta && meta.pages > 1"
+      :page="page"
+      :total-pages="meta.pages"
+      :total-items="meta.total"
+      :page-size="25"
+      @update:page="page = $event"
+    />
   </section>
 </template>

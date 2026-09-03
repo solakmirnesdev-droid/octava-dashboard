@@ -5,6 +5,7 @@ import { useToasts } from '../composables/useToasts';
 import AppModal from '../components/AppModal.vue';
 import SkeletonLoader from '../components/SkeletonLoader.vue';
 import { initials, avatarStyle } from '../utils/avatar';
+import { AppButton, AppBadge, AppCard, AppInput, AppSelect, AppSegmentedControl, AppPagination, AppEmptyState } from '../components/ui';
 import IconStar from '~icons/material-symbols/star-rounded';
 import IconUsers from '~icons/material-symbols/group-rounded';
 import IconSignedIn from '~icons/material-symbols/login-rounded';
@@ -16,8 +17,6 @@ import IconSearch from '~icons/material-symbols/search-rounded';
 import IconClose from '~icons/material-symbols/close-rounded';
 import IconPerson from '~icons/material-symbols/person-outline-rounded';
 import IconMail from '~icons/material-symbols/mail-outline-rounded';
-import IconPrev from '~icons/material-symbols/chevron-left-rounded';
-import IconNext from '~icons/material-symbols/chevron-right-rounded';
 import IconBookmark from '~icons/material-symbols/bookmark-rounded';
 
 const toasts = useToasts();
@@ -213,25 +212,28 @@ async function toggleActive(member) {
       </div>
 
       <div class="flex items-center gap-2">
-        <button
+        <AppButton
           v-if="tab !== 'users'"
-          type="button"
-          class="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs sm:text-sm font-bold text-on-accent hover:brightness-110 active:scale-95 transition shadow-xs cursor-pointer"
+          variant="primary"
+          size="sm"
           @click="openCreate"
         >
-          <IconAdd class="text-base" />
-          <span>Novi nalog za tim</span>
-        </button>
+          <template #icon>
+            <IconAdd class="text-base" />
+          </template>
+          Novi nalog za tim
+        </AppButton>
       </div>
     </div>
 
     <!-- Quick Insights Metric Tiles (Interactive Fast Filters) -->
     <div v-if="stats && tab === 'users'" class="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       <!-- 1. Pretplaćeni -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          filter === 'subscribed' ? 'border-ok ring-2 ring-ok/30' : 'border-line hover:border-line-strong',
+          filter === 'subscribed' ? '!border-ok ring-2 ring-ok/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="filter = filter === 'subscribed' ? '' : 'subscribed'"
@@ -240,21 +242,22 @@ async function toggleActive(member) {
           <span class="font-medium flex items-center gap-1">
             <IconStar class="text-sm text-ok" /> Pretplaćenih
           </span>
-          <span v-if="stats.cancelling" class="text-[10px] font-bold text-warn bg-warn-soft px-1.5 py-0.2 rounded">
+          <AppBadge v-if="stats.cancelling" variant="warn" size="xs">
             {{ stats.cancelling }} otkazuje
-          </span>
+          </AppBadge>
         </div>
         <div class="mt-1.5 flex items-baseline gap-2">
           <span class="font-mono text-2xl sm:text-3xl font-black text-ok" :class="{ 'animate-count-bump': statsPopping }">{{ stats.subscribed ?? 0 }}</span>
           <span class="text-[11px] text-faint">čitalaca</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- 2. Ukupno registrovanih -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          filter === '' ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong',
+          filter === '' ? '!border-accent ring-2 ring-accent/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="filter = ''"
@@ -269,13 +272,14 @@ async function toggleActive(member) {
           <span class="font-mono text-2xl sm:text-3xl font-black text-ink" :class="{ 'animate-count-bump': statsPopping }">{{ stats.total }}</span>
           <span class="text-[11px] text-faint">naloga</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- 3. Aktivnih ovaj mjesec -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          filter === 'active' ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong',
+          filter === 'active' ? '!border-accent ring-2 ring-accent/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="filter = filter === 'active' ? '' : 'active'"
@@ -292,13 +296,14 @@ async function toggleActive(member) {
           <span class="font-mono text-2xl sm:text-3xl font-black text-accent" :class="{ 'animate-count-bump': statsPopping }">{{ stats.activeThisMonth }}</span>
           <span class="text-[11px] text-faint">ovaj mjesec</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- 4. Prijavljeni ikad / Nikad -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          filter === 'never' ? 'border-warn ring-2 ring-warn/30' : 'border-line hover:border-line-strong',
+          filter === 'never' ? '!border-warn ring-2 ring-warn/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="filter = filter === 'never' ? '' : 'never'"
@@ -313,7 +318,7 @@ async function toggleActive(member) {
           <span class="font-mono text-2xl sm:text-3xl font-black text-ink" :class="{ 'animate-count-bump': statsPopping }">{{ stats.everSignedIn }}</span>
           <span class="text-[11px] text-faint">od {{ stats.total }}</span>
         </div>
-      </div>
+      </AppCard>
     </div>
 
     <!-- Navigation Tabs & Search Toolbar -->
@@ -507,32 +512,14 @@ async function toggleActive(member) {
       </div>
 
       <!-- Pagination Controls -->
-      <div v-if="meta && meta.pages > 1" class="flex items-center justify-between border-t border-line-soft p-3 bg-surface/50 text-xs">
-        <span class="text-muted font-medium">
-          Prikazano <span class="font-bold text-ink">{{ (page - 1) * 25 + 1 }}</span> – <span class="font-bold text-ink">{{ Math.min(page * 25, meta.total) }}</span> od <span class="font-bold text-ink">{{ meta.total }}</span> korisnika
-        </span>
-
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="flex items-center gap-1 rounded-xl border border-line-strong bg-panel px-3 py-1.5 font-semibold text-muted hover:border-accent hover:text-ink disabled:opacity-40 transition cursor-pointer shadow-2xs"
-            :disabled="page <= 1"
-            @click="page--"
-          >
-            <IconPrev class="text-base" /> Prethodna
-          </button>
-
-          <span class="font-mono font-bold text-ink px-2">{{ meta.page }} / {{ meta.pages }}</span>
-
-          <button
-            type="button"
-            class="flex items-center gap-1 rounded-xl border border-line-strong bg-panel px-3 py-1.5 font-semibold text-muted hover:border-accent hover:text-ink disabled:opacity-40 transition cursor-pointer shadow-2xs"
-            :disabled="page >= meta.pages"
-            @click="page++"
-          >
-            Sljedeća <IconNext class="text-base" />
-          </button>
-        </div>
+      <div v-if="meta && meta.pages > 1" class="border-t border-line-soft p-3 bg-surface/50">
+        <AppPagination
+          :page="page"
+          :total-pages="meta.pages"
+          :total-items="meta.total"
+          :page-size="25"
+          @update:page="page = $event"
+        />
       </div>
     </div>
 

@@ -11,12 +11,11 @@ import SkeletonLoader from '../components/SkeletonLoader.vue';
 import { initials, avatarStyle } from '../utils/avatar';
 import { findFingering } from '../utils/chordEngine';
 import { strum } from '../utils/chordAudio';
+import { AppButton, AppBadge, AppCard, AppPagination, AppEmptyState } from '../components/ui';
 
 import IconAdd from '~icons/material-symbols/add-rounded';
 import IconPublish from '~icons/material-symbols/visibility-rounded';
 import IconUnpublish from '~icons/material-symbols/visibility-off-rounded';
-import IconPrev from '~icons/material-symbols/chevron-left-rounded';
-import IconNext from '~icons/material-symbols/chevron-right-rounded';
 import IconEdit from '~icons/material-symbols/edit-outline-rounded';
 import IconMusic from '~icons/material-symbols/music-note-rounded';
 import IconSearch from '~icons/material-symbols/search-rounded';
@@ -337,23 +336,27 @@ function turn(to) {
           </button>
         </div>
 
-        <RouterLink
+        <AppButton
           :to="{ name: 'song-new' }"
-          class="flex items-center gap-1.5 rounded-xl bg-ink px-3.5 py-2 text-xs sm:text-sm font-bold text-on-ink hover:bg-accent transition shadow-md active:scale-95 cursor-pointer"
+          variant="primary"
+          size="sm"
         >
-          <IconAdd class="text-base" />
-          <span>Nova pjesma</span>
-        </RouterLink>
+          <template #icon>
+            <IconAdd class="text-base" />
+          </template>
+          Nova pjesma
+        </AppButton>
       </div>
     </div>
 
     <!-- QUICK STATS INSIGHT TILES (Click-to-Filter) -->
     <div class="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
       <!-- Tile 1: All Songs -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          status === '' && tag === '' && !searchQuery ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong',
+          status === '' && tag === '' && !searchQuery ? '!border-accent ring-2 ring-accent/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="setFilter('')"
@@ -370,13 +373,14 @@ function turn(to) {
           </span>
           <span class="text-[11px] text-faint">u bazi</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- Tile 2: Published -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          status === 'published' ? 'border-ok ring-2 ring-ok/30' : 'border-line hover:border-line-strong',
+          status === 'published' ? '!border-ok ring-2 ring-ok/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="setFilter('published')"
@@ -393,13 +397,14 @@ function turn(to) {
           </span>
           <span class="text-[11px] text-faint">na sajtu</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- Tile 3: Drafts -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          status === 'draft' ? 'border-warn ring-2 ring-warn/30' : 'border-line hover:border-line-strong',
+          status === 'draft' ? '!border-warn ring-2 ring-warn/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="setFilter('draft')"
@@ -416,13 +421,14 @@ function turn(to) {
           </span>
           <span class="text-[11px] text-faint">u pripremi</span>
         </div>
-      </div>
+      </AppCard>
 
       <!-- Tile 4: Needs Chords / Check -->
-      <div
-        class="rounded-2xl border bg-panel p-3.5 shadow-2xs transition-all cursor-pointer"
+      <AppCard
+        variant="interactive"
+        padding="sm"
         :class="[
-          tag === 'bez-akorda' ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong',
+          tag === 'bez-akorda' ? '!border-accent ring-2 ring-accent/30' : '',
           statsPopping ? 'animate-pulse-glow' : ''
         ]"
         @click="setTag('bez-akorda')"
@@ -439,7 +445,7 @@ function turn(to) {
           </span>
           <span class="text-[11px] text-faint">za dopunu</span>
         </div>
-      </div>
+      </AppCard>
     </div>
 
     <!-- EX-YU ALPHABET SCRUBBER BAR -->
@@ -820,34 +826,15 @@ function turn(to) {
     />
 
     <!-- PAGINATION BAR -->
-    <nav
+    <AppPagination
       v-if="meta && meta.pages > 1"
-      class="mt-8 flex flex-wrap items-center justify-center gap-3 text-xs sm:text-sm select-none"
-    >
-      <button
-        type="button"
-        class="flex items-center gap-1.5 rounded-xl border border-line-strong bg-panel px-3.5 py-2 font-semibold text-ink hover:border-accent hover:text-accent disabled:opacity-30 transition shadow-2xs active:scale-95 cursor-pointer"
-        :disabled="page <= 1"
-        @click="turn(page - 1)"
-      >
-        <IconPrev class="text-base" />
-        <span>Prethodna</span>
-      </button>
-
-      <span class="font-mono text-xs font-bold text-muted bg-raised px-3 py-1.5 rounded-xl border border-line-soft">
-        Stranica {{ meta.page }} od {{ meta.pages }}
-      </span>
-
-      <button
-        type="button"
-        class="flex items-center gap-1.5 rounded-xl border border-line-strong bg-panel px-3.5 py-2 font-semibold text-ink hover:border-accent hover:text-accent disabled:opacity-30 transition shadow-2xs active:scale-95 cursor-pointer"
-        :disabled="page >= meta.pages"
-        @click="turn(page + 1)"
-      >
-        <span>Sljedeća</span>
-        <IconNext class="text-base" />
-      </button>
-    </nav>
+      class="mt-8"
+      :page="page"
+      :total-pages="meta.pages"
+      :total-items="meta.total"
+      :page-size="25"
+      @update:page="turn($event)"
+    />
   </section>
 </template>
 

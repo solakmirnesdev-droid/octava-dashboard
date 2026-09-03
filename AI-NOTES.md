@@ -1,3 +1,40 @@
+### 2026-08-31 — Reusable Design System Architecture & Atomic UI Primitives
+
+- **What:**
+  1. **Centralized CSS Primitives (`src/style.css`):**
+     - Button utilities: `btn-primary`, `btn-secondary`, `btn-ghost`, `btn-danger`, `btn-accent`.
+     - Form controls: `input-base`, `textarea-base`, `select-base`.
+     - Cards & surfaces: `card-base`, `card-interactive` (with hover-lift micro-physics), `card-glass`, `card-sunken`.
+     - Badges & status pills: `badge-pill`, `badge-accent`, `badge-ok`, `badge-warn`, `badge-danger`.
+  2. **Atomic UI Components (`src/components/ui/`):**
+     - `<AppButton>`: Polymorphic (RouterLink / a / button) with `variant`, `size`, `loading` spinner, `disabled`, `block`, `#icon`, `#iconRight`.
+     - `<AppBadge>`: Semantic status pills with `variant`, `size`, `dot` indicator, `pulse` animation.
+     - `<AppCard>`: Standard container with `variant` (`default`, `interactive`, `glass`, `sunken`), `padding`, `as`.
+     - `<AppInput>`: Form input with built-in `label`, `error`, `help`, `required`, `#icon`, clear button, and `v-model`.
+     - `<AppSelect>`: Styled native select wrapper with options, label, error handling.
+     - `<AppSegmentedControl>`: Standard pill tabs / segmented switcher with badges.
+     - `<AppStatsCard>`: Standard dashboard metric card with value, subtitle, trend indicator, and `#icon`.
+     - `<AppEmptyState>`: Standard dashed empty state container with icon and `#action`.
+     - `<AppPagination>`: Standard table/grid pager with total count and responsive page jumps.
+  3. **Standardized Views:** Refactored `StatsView.vue`, `RequestsView.vue`, `ReportsView.vue`, `SongsView.vue`, `AccountsView.vue`, and `SecurityView.vue` to use the design system, eliminating hundreds of lines of repetitive CSS/HTML.
+- **Why:** Accelerates frontend development, prevents UI drift across pages, reduces CSS bundle overhead, and guarantees robust accessibility and mobile responsiveness.
+- **Affects:** `src/style.css`, `src/components/ui/*`, `src/views/*`.
+
+### 2026-08-31 — Song Editor UX: Pro 70/30 Layout, Zen Fullscreen, Dynamic Sizing & Sleek Rails
+
+- **What:**
+  1. **Pro 70/30 & Multi-Mode Layouts:** Added 4 desktop layout modes:
+     - `Pro (70/30)`: Generous 70% width for the chord editor + 30% live companion preview (default).
+     - `50/50`: Equal split.
+     - `100% Uređivač`: Full-width single-column chord editor.
+     - `100% Pregled`: Full-width live preview.
+  2. **Zen Fullscreen Mode (`isZenFullscreen`):** 1-click button to expand the editor across the entire viewport (100vw/100vh) hiding navigation bars and margins for distraction-free editing.
+  3. **Auto Details Collapse:** Song metadata is collapsed by default for existing songs, freeing up ~350px of vertical space directly for the lyrics and chords.
+  4. **Expansive Viewport Height & Auto-expand:** Increased container height calculation (`calc(100vh - 10.5rem)` / `min-h-[620px]`) with toggleable full-document flow (`autoExpandHeight`).
+  5. **Anti-Collision Chord Staggering & Compact Rails:** Enforced minimum 32px separation between chord chips even on short intro lines (e.g. `Uvod: [Fm] [Cm]...`), adjusted lane height (`h-[1.5em]`), and tightened section headers/lyrics margins to display 12-18 stanzas at once.
+- **Why:** Prevent cramped editing on laptop screens, eliminate chord overlapping on short intro lines, and maximize usable screen real estate.
+- **Affects:** `src/views/SongEditorView.vue`, `src/components/ChordLineEditor.vue`.
+
 ### 2026-08-30 — Traps worth not rediscovering
 
 Written down a second time: the first copy was lost when this file was rewritten
